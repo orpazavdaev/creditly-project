@@ -53,10 +53,29 @@ Default URL: `http://localhost:3000`. Set `NEXT_PUBLIC_API_URL` in `frontend/.en
 | `backend` | `npm run dev`  | API with reload      |
 | `backend` | `npm run build` / `npm start` | Production build and run |
 | `backend` | `npm run lint` / `npm run format` | ESLint / Prettier |
+| `backend` | `npm run db:up` | Start local Postgres via Docker Compose |
+| `backend` | `npm run db:push` | Apply `schema.prisma` to Postgres (`prisma db push`) |
+| `backend` | `npm run db:generate` / `npm run db:validate` | Prisma Client / schema check |
 | `frontend`| `npm run dev`  | Next dev server      |
 | `frontend`| `npm run build` / `npm start` | Production         |
 | `frontend`| `npm run lint` / `npm run format` | ESLint / Prettier |
 
+## Database (Prisma and PostgreSQL)
+
+The API uses Prisma with PostgreSQL. Configure `DATABASE_URL` in `backend/.env` (see `backend/.env.example`). With Docker available, you can start Postgres from `backend` with `npm run db:up` (uses `docker-compose.yml`). Then:
+
+```bash
+npm run db:push
+```
+
+`npm run build` runs `prisma generate` before the TypeScript compile.
+
+### Why `db push` for local development, and migrations for production
+
+`prisma db push` updates the database to match `schema.prisma` without writing migration files. That keeps iteration fast when the model is still moving and the database is disposable or personal: you avoid migration history, merge conflicts on SQL files, and drift between “what migrate thinks” and “what the DB actually has” during early design.
+
+For **production** (and usually shared staging), prefer **versioned migrations** (`prisma migrate dev` in development, `prisma migrate deploy` in CI/CD). Migrations give repeatable, auditable schema changes, peer review of DDL, controlled rollout, and a clear upgrade path across environments. Use **`db push`** where losing or resetting the schema is acceptable; use **`migrate deploy`** where the database must evolve safely with the codebase.
+
 ## Environment
 
-Each app loads its own env files and documents variables in `.env.example`. Real secrets stay out of git via each folder’s `.gitignore`.
+Each app loads its own env files and documents variables in `backend/.env.example` and `frontend/.env.example`. Real secrets stay out of git via each folder’s `.gitignore`.

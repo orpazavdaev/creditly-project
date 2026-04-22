@@ -1,0 +1,152 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  USER
+  BANKER
+}
+
+enum Specialisation {
+  NEW_MORTGAGE
+  REFINANCE
+  PERSONAL_LOAN
+  BUSINESS_LOAN
+}
+
+enum AccountStatus {
+  NEW
+  READY_FOR_AUCTION
+  AUCTION_OPEN
+  WON
+}
+
+enum SyncStatus {
+  SUCCESS
+  FAILED
+}
+
+enum EventType {
+  DOCUMENT_UPLOADED
+  STATUS_CHANGED
+  NOTE_ADDED
+  AUCTION_OPENED
+  OFFER_SUBMITTED
+  AUCTION_CLOSED
+}
+
+enum AuctionOpportunityStatus {
+  OPEN
+  EXPIRED
+  CLOSED
+}
+
+model Bank {
+  id     String      @id @default(cuid())
+  name   String
+  users  User[]
+  offers BankOffer[]
+}
+
+model User {
+  id             String           @id @default(cuid())
+  email          String           @unique
+  passwordHash   String
+  role           UserRole
+  bankId         String?
+  bank           Bank?            @relation(fields: [bankId], references: [id], onDelete: SetNull)
+  specialisation Specialisation[] @default([])
+  createdAt      DateTime         @default(now())
+
+  refreshTokens   RefreshToken[]
+  accountUsers    AccountUser[]
+  managedAccounts Account[]            @relation("AccountManager")
+  events          Event[]
+  bankOffers      BankOffer[]          @relation("BankOfferBanker")
+  openedAuctions  AuctionOpportunity[] @relation("AuctionOpenedBy")
+}
+
+model Account {
+  id             String        @id @default(cuid())
+  managerId      String
+  manager        User          @relation("AccountManager", fields: [managerId], references: [id])
+  costumerEmail  String
+  costumerPhone  String
+  costumerName   String
+  status         AccountStatus
+  lastActivity   DateTime
+  isHighActivity Boolean
+  syncStatus     SyncStatus
+  failureReason  String?
+  createdAt      DateTime      @default(now())
+
+  accountUsers       AccountUser[]
+  events             Event[]
+  auctionOpportunity AuctionOpportunity?
+}
+
+model AccountUser {
+  id        String  @id @default(cuid())
+  accountId String
+  userId    String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, userId])
+}
+
+model Event {
+  id        String    @id @default(cuid())
+  accountId String
+  userId    String
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id])
+  type      EventType
+  createdAt DateTime  @default(now())
+  metadata  Json
+}
+
+model AuctionOpportunity {
+  id             String                   @id @default(cuid())
+  accountId      String                   @unique
+  account        Account                  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  winningOfferId String?                  @unique
+  winningOffer   BankOffer?               @relation("AuctionWinningOffer", fields: [winningOfferId], references: [id], onDelete: SetNull)
+  classification Specialisation
+  status         AuctionOpportunityStatus
+  openedBy       String
+  opener         User                     @relation("AuctionOpenedBy", fields: [openedBy], references: [id])
+  openedAt       DateTime
+  expiresAt      DateTime
+  closedAt       DateTime?
+
+  bankOffers BankOffer[] @relation("AuctionBankOffers")
+}
+
+model BankOffer {
+  id                   String             @id @default(cuid())
+  auctionOpportunityId String
+  auctionOpportunity   AuctionOpportunity @relation("AuctionBankOffers", fields: [auctionOpportunityId], references: [id], onDelete: Cascade)
+  bankId               String
+  bank                 Bank               @relation(fields: [bankId], references: [id])
+  bankerId             String
+  banker               User               @relation("BankOfferBanker", fields: [bankerId], references: [id])
+  totalInterestRate    Float
+  createdAt            DateTime           @default(now())
+
+  winningForAuction AuctionOpportunity? @relation("AuctionWinningOffer")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String
+  expiresAt DateTime
+}
