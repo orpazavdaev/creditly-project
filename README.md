@@ -76,6 +76,27 @@ npm run db:push
 
 For **production** (and usually shared staging), prefer **versioned migrations** (`prisma migrate dev` in development, `prisma migrate deploy` in CI/CD). Migrations give repeatable, auditable schema changes, peer review of DDL, controlled rollout, and a clear upgrade path across environments. Use **`db push`** where losing or resetting the schema is acceptable; use **`migrate deploy`** where the database must evolve safely with the codebase.
 
+## Authentication (backend)
+
+### Endpoints
+
+- `POST /auth/register` — body: `email`, `password`, `role` (`ADMIN` | `MANAGER` | `USER` | `BANKER`). Creates the user (password hashed with bcrypt). Returns `201` with `id`, `email`, `role`. No tokens.
+- `POST /auth/login` — body: `email`, `password`. Validates credentials, returns JSON `{ accessToken, expiresIn }` (seconds). Sets an **HttpOnly** cookie (name from `REFRESH_TOKEN_COOKIE`, default `refreshToken`) containing the **raw** refresh token; `path` is `/auth` so it is sent to `/auth/*` only.
+- `POST /auth/refresh` — no body; reads the refresh cookie, looks up **SHA-256** hash in `RefreshToken`, rejects if missing or expired. **Rotates** the refresh: deletes the old row, stores a new hash, sets a new cookie, returns `{ accessToken, expiresIn }`.
+
+### Token flow
+
+1. **Access token** — short-lived JWT (`ACCESS_TOKEN_EXPIRES_SECONDS`, default 900). Sent in `Authorization: Bearer <token>`. Keep it in memory on the client; do not store it in `localStorage` if you want to limit XSS impact.
+2. **Refresh token** — long-lived opaque random string in an **HttpOnly** cookie (`REFRESH_TOKEN_EXPIRES_DAYS`, default 7). The API never stores the raw value: only **SHA-256** hashes are persisted. On refresh, the previous DB row is **deleted** and a new token is issued (rotation). Compromise of one refresh token invalidates that chain after use.
+3. **`authenticateJWT` middleware** — verifies the JWT signature and expiry, checks `sub`, `email`, and `role`, then sets `req.user`. Use it on routes that require a logged-in user.
+
+### Security choices
+
+- **Bcrypt** for password storage; generic `401` on login failure to avoid email enumeration.
+- **JWT** signed with `JWT_SECRET` (required); production should use a long random secret.
+- **Refresh cookies**: `httpOnly`, `sameSite: lax`, `secure` when `NODE_ENV=production`. **CORS** uses `credentials: true` and a single `CORS_ORIGIN` so browsers can send cookies to the API.
+- **Cleanup**: an in-process job runs **every 12 hours** and deletes refresh tokens with `expiresAt` in the past so the table does not grow forever.
+
 ## Environment
 
 Each app loads its own env files and documents variables in `backend/.env.example` and `frontend/.env.example`. Real secrets stay out of git via each folder’s `.gitignore`.
