@@ -1,3 +1,4 @@
+import { AuctionOpportunityStatus, EventType } from "@prisma/client";
 import type { DomainEventCreatedPayload } from "../event-bus/domain-events.js";
 import type { EventBus } from "../event-bus/event-bus.js";
 import {
@@ -17,7 +18,7 @@ export class DomainEventBusinessService {
   async applyOnEventCreated(payload: DomainEventCreatedPayload): Promise<void> {
     const { type, accountId } = payload;
 
-    if (type === "DOCUMENT_UPLOADED") {
+    if (type === EventType.DOCUMENT_UPLOADED) {
       await this.repo.updateAccountDocumentState(accountId, new Date());
     }
 
@@ -25,15 +26,15 @@ export class DomainEventBusinessService {
     const count24h = await this.repo.countEventsSince(accountId, since);
     await this.repo.updateAccountHighActivity(accountId, count24h > 3);
 
-    if (type === "AUCTION_CLOSED") {
+    if (type === EventType.AUCTION_CLOSED) {
       const auction = await this.repo.findAuctionWithOffersByAccountId(accountId);
       if (!auction) {
         return;
       }
-      if (auction.status === "CLOSED") {
+      if (auction.status === AuctionOpportunityStatus.CLOSED) {
         return;
       }
-      if (auction.status === "EXPIRED" && auction.bankOffers.length === 0) {
+      if (auction.status === AuctionOpportunityStatus.EXPIRED && auction.bankOffers.length === 0) {
         return;
       }
       const offers = auction.bankOffers;

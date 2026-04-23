@@ -1,4 +1,4 @@
-import type { AuctionOpportunityStatus, Specialisation } from "@prisma/client";
+import { AuctionOpportunityStatus, type Specialisation } from "@prisma/client";
 import { prisma } from "./prisma.js";
 
 export type AuctionBrowseRow = {
@@ -54,7 +54,7 @@ export class AuctionBrowseRepository {
     return prisma.auctionOpportunity.findMany({
       where: {
         classification: { in: classifications },
-        status: "OPEN",
+        status: AuctionOpportunityStatus.OPEN,
         expiresAt: { gt: new Date() },
       },
       select: {

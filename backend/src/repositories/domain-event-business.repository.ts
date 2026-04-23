@@ -1,12 +1,17 @@
-import type { AuctionOpportunity, BankOffer } from "@prisma/client";
+import {
+  AccountStatus,
+  AuctionOpportunityStatus,
+  type AuctionOpportunity,
+  type BankOffer,
+} from "@prisma/client";
 import { prisma } from "./prisma.js";
 
 export class DomainEventBusinessRepository {
   updateAccountDocumentState(accountId: string, lastActivity: Date): Promise<void> {
     return prisma.account
       .updateMany({
-        where: { id: accountId, status: "NEW" },
-        data: { status: "READY_FOR_AUCTION", lastActivity },
+        where: { id: accountId, status: AccountStatus.NEW },
+        data: { status: AccountStatus.READY_FOR_AUCTION, lastActivity },
       })
       .then(() => undefined);
   }
@@ -43,7 +48,7 @@ export class DomainEventBusinessRepository {
     return prisma.auctionOpportunity
       .update({
         where: { id: auctionId },
-        data: { status: "EXPIRED", closedAt, winningOfferId: null },
+        data: { status: AuctionOpportunityStatus.EXPIRED, closedAt, winningOfferId: null },
       })
       .then(() => undefined);
   }
@@ -58,11 +63,11 @@ export class DomainEventBusinessRepository {
       .$transaction([
         prisma.auctionOpportunity.update({
           where: { id: auctionId },
-          data: { status: "CLOSED", closedAt, winningOfferId },
+          data: { status: AuctionOpportunityStatus.CLOSED, closedAt, winningOfferId },
         }),
         prisma.account.update({
           where: { id: accountId },
-          data: { status: "WON" },
+          data: { status: AccountStatus.WON },
         }),
       ])
       .then(() => undefined);

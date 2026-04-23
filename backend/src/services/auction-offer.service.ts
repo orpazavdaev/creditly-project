@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { AuctionOpportunityStatus, Prisma } from "@prisma/client";
 import type { EventBus } from "../event-bus/event-bus.js";
 import { publishEventCreated, toDomainEventCreatedPayload } from "../event-bus/publish-domain-event.js";
 import { HttpError } from "../utils/http-error.js";
@@ -137,7 +137,7 @@ export class AuctionOfferService {
     if (!auction) {
       throw new HttpError(404, "Auction not found", "not_found");
     }
-    if (auction.status !== "OPEN") {
+    if (auction.status !== AuctionOpportunityStatus.OPEN) {
       throw new HttpError(400, "Auction must be OPEN", "auction_not_open");
     }
     if (auction.expiresAt <= new Date()) {

@@ -1,4 +1,9 @@
-import type { AccountStatus, AuctionOpportunityStatus, Specialisation, SyncStatus } from "@prisma/client";
+import {
+  AccountStatus,
+  AuctionOpportunityStatus,
+  Specialisation,
+  SyncStatus,
+} from "@prisma/client";
 import { prisma } from "./prisma.js";
 
 const staffListSelect = {
@@ -101,10 +106,10 @@ export class AccountRepository {
           costumerName: data.costumerName,
           costumerEmail: data.costumerEmail,
           costumerPhone: data.costumerPhone,
-          status: "NEW",
+          status: AccountStatus.NEW,
           lastActivity: new Date(),
           isHighActivity: false,
-          syncStatus: "SUCCESS",
+          syncStatus: SyncStatus.SUCCESS,
         },
         select: { id: true },
       });

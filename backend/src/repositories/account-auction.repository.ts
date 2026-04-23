@@ -1,4 +1,11 @@
-import type { AuctionOpportunity, Event, Specialisation } from "@prisma/client";
+import {
+  AccountStatus,
+  AuctionOpportunityStatus,
+  EventType,
+  type AuctionOpportunity,
+  type Event,
+  type Specialisation,
+} from "@prisma/client";
 import { prisma } from "./prisma.js";
 
 export class AccountAuctionRepository {
@@ -21,7 +28,7 @@ export class AccountAuctionRepository {
         data: {
           accountId: data.accountId,
           classification: data.classification,
-          status: "OPEN",
+          status: AuctionOpportunityStatus.OPEN,
           openedBy: data.userId,
           openedAt: data.openedAt,
           expiresAt: data.expiresAt,
@@ -29,13 +36,13 @@ export class AccountAuctionRepository {
       });
       await tx.account.update({
         where: { id: data.accountId },
-        data: { status: "AUCTION_OPEN", lastActivity: data.openedAt },
+        data: { status: AccountStatus.AUCTION_OPEN, lastActivity: data.openedAt },
       });
       const eventRow = await tx.event.create({
         data: {
           accountId: data.accountId,
           userId: data.userId,
-          type: "AUCTION_OPENED",
+          type: EventType.AUCTION_OPENED,
           metadata: { auctionId: auction.id },
         },
       });

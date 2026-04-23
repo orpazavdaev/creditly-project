@@ -1,3 +1,4 @@
+import { AuctionOpportunityStatus } from "@prisma/client";
 import type { AccountStaffDetailRow, AccountStaffListRow } from "../repositories/account.repository.js";
 import { emailLocalPart } from "../utils/email-display.js";
 import { effectiveAuctionOpportunityStatus } from "../utils/auction-opportunity-status.js";
@@ -70,7 +71,8 @@ export function toAccountStaffDetailItem(row: AccountStaffDetailRow): AccountSta
             bankName: auc.winningOffer.bank.name,
           }
         : null,
-      canCloseAuction: auc.status !== "CLOSED" && auc.expiresAt.getTime() <= now.getTime(),
+      canCloseAuction:
+        auc.status !== AuctionOpportunityStatus.CLOSED && auc.expiresAt.getTime() <= now.getTime(),
     },
   };
 }

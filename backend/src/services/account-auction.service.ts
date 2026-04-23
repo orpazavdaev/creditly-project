@@ -1,4 +1,4 @@
-import { Prisma, type Specialisation } from "@prisma/client";
+import { AccountStatus, Prisma, type Specialisation } from "@prisma/client";
 import type { EventBus } from "../event-bus/event-bus.js";
 import { publishEventCreated, toDomainEventCreatedPayload } from "../event-bus/publish-domain-event.js";
 import { HttpError } from "../utils/http-error.js";
@@ -46,7 +46,7 @@ export class AccountAuctionService {
     if (!account) {
       throw new HttpError(404, "Account not found", "account_not_found");
     }
-    if (account.status !== "READY_FOR_AUCTION") {
+    if (account.status !== AccountStatus.READY_FOR_AUCTION) {
       throw new HttpError(400, "Account must be READY_FOR_AUCTION", "account_not_ready");
     }
     if (account.auctionOpportunity) {

@@ -1,10 +1,10 @@
-import type { Event } from "@prisma/client";
+import { AuctionOpportunityStatus, EventType, type Event } from "@prisma/client";
 import { prisma } from "./prisma.js";
 
 export type AuctionCloseRow = {
   id: string;
   accountId: string;
-  status: "OPEN" | "EXPIRED" | "CLOSED";
+  status: AuctionOpportunityStatus;
   expiresAt: Date;
   _count: { bankOffers: number };
 };
@@ -20,7 +20,7 @@ export class AuctionLifecycleRepository {
           _count: { select: { bankOffers: true } },
         },
       });
-      if (!row || row.status !== "OPEN" || row.expiresAt > new Date()) {
+      if (!row || row.status !== AuctionOpportunityStatus.OPEN || row.expiresAt > new Date()) {
         return;
       }
       if (row._count.bankOffers > 0) {
@@ -28,7 +28,7 @@ export class AuctionLifecycleRepository {
       }
       await tx.auctionOpportunity.update({
         where: { id: auctionId },
-        data: { status: "EXPIRED", closedAt: new Date(), winningOfferId: null },
+        data: { status: AuctionOpportunityStatus.EXPIRED, closedAt: new Date(), winningOfferId: null },
       });
     });
   }
@@ -37,14 +37,14 @@ export class AuctionLifecycleRepository {
     return prisma.$transaction(async (tx) => {
       const now = new Date();
       const rows = await tx.auctionOpportunity.findMany({
-        where: { status: "OPEN", expiresAt: { lte: now } },
+        where: { status: AuctionOpportunityStatus.OPEN, expiresAt: { lte: now } },
         select: { id: true, _count: { select: { bankOffers: true } } },
       });
       for (const r of rows) {
         if (r._count.bankOffers > 0) continue;
         await tx.auctionOpportunity.update({
           where: { id: r.id },
-          data: { status: "EXPIRED", closedAt: now, winningOfferId: null },
+          data: { status: AuctionOpportunityStatus.EXPIRED, closedAt: now, winningOfferId: null },
         });
       }
     });
@@ -65,8 +65,8 @@ export class AuctionLifecycleRepository {
 
   async finalizeExpiredWithoutBids(auctionId: string): Promise<void> {
     await prisma.auctionOpportunity.updateMany({
-      where: { id: auctionId, status: "EXPIRED" },
-      data: { status: "CLOSED" },
+      where: { id: auctionId, status: AuctionOpportunityStatus.EXPIRED },
+      data: { status: AuctionOpportunityStatus.CLOSED },
     });
   }
 
@@ -79,7 +79,7 @@ export class AuctionLifecycleRepository {
       data: {
         accountId: data.accountId,
         userId: data.userId,
-        type: "AUCTION_CLOSED",
+        type: EventType.AUCTION_CLOSED,
         metadata: { auctionId: data.auctionId },
       },
     });

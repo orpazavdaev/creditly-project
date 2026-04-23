@@ -1,10 +1,14 @@
-import type { EventType } from "@prisma/client";
+import { EventType } from "@prisma/client";
 import type { DomainEventCreatedPayload } from "../event-bus/domain-events.js";
 import type { WinningOfferSelectedPayload } from "../event-bus/crm-integration-events.js";
 import type { CrmOutboundClient } from "../integration/crm-mock.js";
 import type { AccountSyncRepository } from "../repositories/account-sync.repository.js";
 
-const TRIGGER_EVENTS = new Set<EventType>(["DOCUMENT_UPLOADED", "STATUS_CHANGED", "AUCTION_OPENED"]);
+const TRIGGER_EVENTS = new Set<EventType>([
+  EventType.DOCUMENT_UPLOADED,
+  EventType.STATUS_CHANGED,
+  EventType.AUCTION_OPENED,
+]);
 
 export class CrmService {
   constructor(

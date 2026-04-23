@@ -1,4 +1,10 @@
-import type { AuctionOpportunity, BankOffer, Event, Specialisation } from "@prisma/client";
+import {
+  EventType,
+  type AuctionOpportunity,
+  type BankOffer,
+  type Event,
+  type Specialisation,
+} from "@prisma/client";
 import { prisma } from "./prisma.js";
 
 export type BankerForList = {
@@ -120,7 +126,7 @@ export class AuctionOfferRepository {
         data: {
           accountId: data.accountId,
           userId: data.userId,
-          type: "OFFER_SUBMITTED",
+          type: EventType.OFFER_SUBMITTED,
           metadata: {
             auctionId: data.auctionId,
             offerId: offer.id,

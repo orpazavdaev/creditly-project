@@ -1,12 +1,12 @@
-import type { AuctionOpportunityStatus } from "@prisma/client";
+import { AuctionOpportunityStatus } from "@prisma/client";
 
 export function effectiveAuctionOpportunityStatus(
   status: AuctionOpportunityStatus,
   expiresAt: Date,
   now: Date = new Date()
 ): AuctionOpportunityStatus {
-  if (status === "OPEN" && expiresAt.getTime() <= now.getTime()) {
-    return "EXPIRED";
+  if (status === AuctionOpportunityStatus.OPEN && expiresAt.getTime() <= now.getTime()) {
+    return AuctionOpportunityStatus.EXPIRED;
   }
   return status;
 }

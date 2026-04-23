@@ -1,3 +1,4 @@
+import { SyncStatus } from "@prisma/client";
 import { prisma } from "./prisma.js";
 
 export class AccountSyncRepository {
@@ -5,7 +6,7 @@ export class AccountSyncRepository {
     return prisma.account
       .update({
         where: { id: accountId },
-        data: { syncStatus: "SUCCESS", failureReason: null },
+        data: { syncStatus: SyncStatus.SUCCESS, failureReason: null },
       })
       .then(() => undefined);
   }
@@ -15,7 +16,7 @@ export class AccountSyncRepository {
       .update({
         where: { id: accountId },
         data: {
-          syncStatus: "FAILED",
+          syncStatus: SyncStatus.FAILED,
           failureReason: reason.slice(0, 2000),
         },
       })

@@ -1,3 +1,4 @@
+import { AuctionOpportunityStatus } from "@prisma/client";
 import type { EventBus } from "../event-bus/event-bus.js";
 import { publishEventCreated, toDomainEventCreatedPayload } from "../event-bus/publish-domain-event.js";
 import { HttpError } from "../utils/http-error.js";
@@ -20,7 +21,7 @@ export class AuctionCloseService {
     if (!row) {
       throw new HttpError(404, "Auction not found", "not_found");
     }
-    if (row.status === "CLOSED") {
+    if (row.status === AuctionOpportunityStatus.CLOSED) {
       throw new HttpError(400, "Auction is already closed", "auction_already_closed");
     }
     const now = new Date();
@@ -30,7 +31,7 @@ export class AuctionCloseService {
 
     await this.accountAccess.assertManagerAdminCanAccessAccount(user, row.accountId);
 
-    if (row.status === "EXPIRED" && row._count.bankOffers === 0) {
+    if (row.status === AuctionOpportunityStatus.EXPIRED && row._count.bankOffers === 0) {
       await this.lifecycleRepo.finalizeExpiredWithoutBids(auctionId);
     }
 

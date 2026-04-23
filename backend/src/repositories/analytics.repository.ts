@@ -1,3 +1,4 @@
+import { AccountStatus, AuctionOpportunityStatus, SyncStatus } from "@prisma/client";
 import { prisma } from "./prisma.js";
 
 export type AnalyticsRawSummary = {
@@ -35,14 +36,18 @@ export class AnalyticsRepository {
       offerStats,
     ] = await Promise.all([
       prisma.account.count({ where: accountWhere }),
-      prisma.account.count({ where: { ...accountWhere, status: "WON" } }),
+      prisma.account.count({ where: { ...accountWhere, status: AccountStatus.WON } }),
       prisma.account.count({ where: { ...accountWhere, isHighActivity: true } }),
-      prisma.account.count({ where: { ...accountWhere, syncStatus: "SUCCESS" } }),
-      prisma.account.count({ where: { ...accountWhere, syncStatus: "FAILED" } }),
+      prisma.account.count({ where: { ...accountWhere, syncStatus: SyncStatus.SUCCESS } }),
+      prisma.account.count({ where: { ...accountWhere, syncStatus: SyncStatus.FAILED } }),
       prisma.auctionOpportunity.count({ where: auctionWhere }),
-      prisma.auctionOpportunity.count({ where: { ...auctionWhere, status: "OPEN" } }),
-      prisma.auctionOpportunity.count({ where: { ...auctionWhere, status: "CLOSED" } }),
-      prisma.auctionOpportunity.count({ where: { ...auctionWhere, status: "EXPIRED" } }),
+      prisma.auctionOpportunity.count({ where: { ...auctionWhere, status: AuctionOpportunityStatus.OPEN } }),
+      prisma.auctionOpportunity.count({
+        where: { ...auctionWhere, status: AuctionOpportunityStatus.CLOSED },
+      }),
+      prisma.auctionOpportunity.count({
+        where: { ...auctionWhere, status: AuctionOpportunityStatus.EXPIRED },
+      }),
       prisma.bankOffer.aggregate({
         where: offerWhere,
         _avg: { totalInterestRate: true },
