@@ -31,6 +31,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </Link>
         <nav className={styles.nav}>
           {isStaffRole(user.role) && navLink("/accounts", "Accounts")}
+          {user.role === "ADMIN" && navLink("/staff-auctions", "Auctions")}
           {isBankerRole(user.role) && navLink("/auctions", "Auctions")}
         </nav>
         <div className={styles.headerRight}>

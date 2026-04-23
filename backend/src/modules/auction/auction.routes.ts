@@ -14,7 +14,7 @@ export function createAuctionRouter(
   const auth = authenticateJWT(env);
   const bankerOnly = { allowAdminBypass: false } as const;
   const managerAdminOnly = requireRoles(["ADMIN", "MANAGER"], { allowAdminBypass: false });
-  r.get("/", auth, requireRole("BANKER", bankerOnly), controller.listRelevantForBanker);
+  r.get("/", auth, requireRoles(["ADMIN", "BANKER"], { allowAdminBypass: false }), controller.list);
   r.post("/:id/close", auth, managerAdminOnly, controller.close);
   r.get("/:id/offers", auth, requireRole("BANKER", bankerOnly), offerController.list);
   r.post("/:id/offers", auth, requireRole("BANKER", bankerOnly), offerController.submit);

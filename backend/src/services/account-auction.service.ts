@@ -5,6 +5,7 @@ import { HttpError } from "../utils/http-error.js";
 import { eventTypeToApi } from "../utils/event-type-api.js";
 import { AccountAuctionRepository } from "../repositories/account-auction.repository.js";
 import type { AuthUser } from "../types/auth-user.js";
+import { emailLocalPart } from "../utils/email-display.js";
 import { parseBody } from "../validation/parse-body.js";
 import { OpenAuctionBodySchema } from "../validation/schemas.js";
 import { AccountAccessService } from "./account-access.service.js";
@@ -35,7 +36,7 @@ export class AccountAuctionService {
     body: unknown
   ): Promise<{ auction: AuctionCreatedApi; event: EventApiRow }> {
     const parsed = parseBody(OpenAuctionBodySchema, body ?? {});
-    const classification: Specialisation = parsed.classification ?? "NEW_MORTGAGE";
+    const classification: Specialisation = parsed.classification;
 
     await this.accountAccess.assertManagerAdminCanAccessAccount(user, accountId);
 
@@ -81,6 +82,7 @@ export class AccountAuctionService {
           type: eventTypeToApi(eventRow.type),
           createdAt: eventRow.createdAt.toISOString(),
           metadata: eventRow.metadata,
+          createdByLabel: emailLocalPart(user.email),
         },
       };
     } catch (e) {

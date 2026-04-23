@@ -13,6 +13,7 @@ export class AuctionCloseService {
   ) {}
 
   async closeByManager(user: AuthUser, auctionId: string): Promise<{ closed: true }> {
+    await this.lifecycleRepo.expireOpenIfPastDue(auctionId);
     const row = await this.lifecycleRepo.findForClose(auctionId);
     if (!row) {
       throw new HttpError(404, "Auction not found", "not_found");
@@ -20,11 +21,16 @@ export class AuctionCloseService {
     if (row.status === "CLOSED") {
       throw new HttpError(400, "Auction is already closed", "auction_already_closed");
     }
-    if (row.status === "EXPIRED" && row._count.bankOffers === 0) {
-      throw new HttpError(400, "Auction is already finalized", "auction_already_finalized");
+    const now = new Date();
+    if (row.expiresAt > now) {
+      throw new HttpError(400, "Auction can only be closed after it has expired", "auction_not_expired");
     }
 
     await this.accountAccess.assertManagerAdminCanAccessAccount(user, row.accountId);
+
+    if (row.status === "EXPIRED" && row._count.bankOffers === 0) {
+      await this.lifecycleRepo.finalizeExpiredWithoutBids(auctionId);
+    }
 
     const eventRow = await this.lifecycleRepo.createAuctionClosedEvent({
       accountId: row.accountId,

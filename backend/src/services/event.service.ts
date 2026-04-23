@@ -6,6 +6,7 @@ import { eventTypeToApi, parseEventTypeFromApi } from "../utils/event-type-api.j
 import { EventRepository } from "../repositories/event.repository.js";
 import type { AuthUser } from "../types/auth-user.js";
 import { AccountAccessService } from "./account-access.service.js";
+import { emailLocalPart } from "../utils/email-display.js";
 import { parseBody } from "../validation/parse-body.js";
 import { EventCreateBodySchema } from "../validation/schemas.js";
 
@@ -16,6 +17,7 @@ export type EventApiRow = {
   type: string;
   createdAt: string;
   metadata: unknown;
+  createdByLabel: string;
 };
 
 export class EventService {
@@ -50,16 +52,16 @@ export class EventService {
       metadata: meta,
     });
     publishEventCreated(this.bus, row);
-    return { event: this.toApi(row) };
+    return { event: this.toApi(row, user.email) };
   }
 
   async listByAccount(user: AuthUser, accountId: string): Promise<{ events: EventApiRow[] }> {
     await this.accountAccess.assertStaffCanAccessAccount(user, accountId);
-    const rows = await this.repo.findByAccountId(accountId);
-    return { events: rows.map((r) => this.toApi(r)) };
+    const rows = await this.repo.findByAccountIdWithActor(accountId);
+    return { events: rows.map((r) => this.toApi(r, r.user.email)) };
   }
 
-  private toApi(row: Event): EventApiRow {
+  private toApi(row: Event, actorEmail: string): EventApiRow {
     return {
       id: row.id,
       accountId: row.accountId,
@@ -67,6 +69,7 @@ export class EventService {
       type: eventTypeToApi(row.type),
       createdAt: row.createdAt.toISOString(),
       metadata: row.metadata,
+      createdByLabel: emailLocalPart(actorEmail),
     };
   }
 }

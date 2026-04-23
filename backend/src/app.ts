@@ -22,6 +22,7 @@ import { AnalyticsRepository } from "./repositories/analytics.repository.js";
 import { AuctionOfferRepository } from "./repositories/auction-offer.repository.js";
 import { AccountAccessService } from "./services/account-access.service.js";
 import { AccountAuctionService } from "./services/account-auction.service.js";
+import { AccountCreateService } from "./services/account-create.service.js";
 import { AccountListService } from "./services/account-list.service.js";
 import { AuctionBrowseService } from "./services/auction-browse.service.js";
 import { AuctionCloseService } from "./services/auction-close.service.js";
@@ -45,7 +46,10 @@ export function createApp(env: AppEnv, eventBus: EventBus = appEventBus): expres
   const accountRepo = new AccountRepository();
   const accountAccess = new AccountAccessService(accountRepo);
   const accountListService = new AccountListService(accountRepo, accountAccess);
-  const auctionBrowseService = new AuctionBrowseService(new AuctionBrowseRepository());
+  const authRepository = new AuthRepository();
+  const accountCreateService = new AccountCreateService(accountRepo);
+  const auctionBrowseRepository = new AuctionBrowseRepository();
+  const auctionBrowseService = new AuctionBrowseService(auctionBrowseRepository);
   const app = express();
   app.use(requestContext);
   app.use(cookieParser());
@@ -61,9 +65,7 @@ export function createApp(env: AppEnv, eventBus: EventBus = appEventBus): expres
     new HealthService(new HealthRepository())
   );
 
-  const authController = new AuthController(
-    new AuthService(new AuthRepository(), env)
-  );
+  const authController = new AuthController(new AuthService(authRepository, env));
 
   app.use("/health", createHealthRouter(healthController));
   app.use("/auth", createAuthRouter(authController));
@@ -91,7 +93,8 @@ export function createApp(env: AppEnv, eventBus: EventBus = appEventBus): expres
       env,
       new AccountController(
         new AccountAuctionService(new AccountAuctionRepository(), eventBus, accountAccess),
-        accountListService
+        accountListService,
+        accountCreateService
       )
     )
   );

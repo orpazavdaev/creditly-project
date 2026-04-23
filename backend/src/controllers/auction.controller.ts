@@ -11,13 +11,13 @@ export class AuctionController {
     private readonly browseService: AuctionBrowseService
   ) {}
 
-  listRelevantForBanker = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  list = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       if (!req.user) {
         next(new HttpError(401, "Unauthorized", "unauthorized"));
         return;
       }
-      const out = await this.browseService.listRelevantAuctionsForBanker(req.user.id);
+      const out = await this.browseService.listForUser(req.user);
       res.status(200).json(out);
     } catch (e) {
       next(e);

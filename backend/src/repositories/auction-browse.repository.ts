@@ -10,6 +10,11 @@ export type AuctionBrowseRow = {
   closedAt: Date | null;
 };
 
+export type AdminAuctionBrowseRow = AuctionBrowseRow & {
+  accountId: string;
+  winningOffer: { totalInterestRate: number; bank: { name: string } } | null;
+};
+
 export class AuctionBrowseRepository {
   findBankerProfile(userId: string): Promise<{
     role: string;
@@ -18,6 +23,27 @@ export class AuctionBrowseRepository {
     return prisma.user.findUnique({
       where: { id: userId },
       select: { role: true, specialisation: true },
+    });
+  }
+
+  findAll(): Promise<AdminAuctionBrowseRow[]> {
+    return prisma.auctionOpportunity.findMany({
+      select: {
+        id: true,
+        accountId: true,
+        classification: true,
+        status: true,
+        openedAt: true,
+        expiresAt: true,
+        closedAt: true,
+        winningOffer: {
+          select: {
+            totalInterestRate: true,
+            bank: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { openedAt: "desc" },
     });
   }
 

@@ -39,8 +39,14 @@ export type AccountStaffDetailRow = AccountStaffListRow & {
   auctionOpportunity: {
     id: string;
     status: AuctionOpportunityStatus;
+    openedAt: Date;
     expiresAt: Date;
+    closedAt: Date | null;
     classification: Specialisation;
+    winningOffer: {
+      totalInterestRate: number;
+      bank: { name: string };
+    } | null;
   } | null;
 };
 
@@ -79,6 +85,27 @@ export class AccountRepository {
     });
   }
 
+  createForAdmin(data: {
+    managerId: string;
+    costumerName: string;
+    costumerEmail: string;
+    costumerPhone: string;
+  }): Promise<AccountStaffListRow> {
+    return prisma.account.create({
+      data: {
+        managerId: data.managerId,
+        costumerName: data.costumerName,
+        costumerEmail: data.costumerEmail,
+        costumerPhone: data.costumerPhone,
+        status: "NEW",
+        lastActivity: new Date(),
+        isHighActivity: false,
+        syncStatus: "SUCCESS",
+      },
+      select: staffListSelect,
+    });
+  }
+
   findStaffDetailById(accountId: string): Promise<AccountStaffDetailRow | null> {
     return prisma.account.findUnique({
       where: { id: accountId },
@@ -88,8 +115,16 @@ export class AccountRepository {
           select: {
             id: true,
             status: true,
+            openedAt: true,
             expiresAt: true,
+            closedAt: true,
             classification: true,
+            winningOffer: {
+              select: {
+                totalInterestRate: true,
+                bank: { select: { name: true } },
+              },
+            },
           },
         },
       },

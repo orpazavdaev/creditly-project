@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import type { AccountAuctionService } from "../services/account-auction.service.js";
+import type { AccountCreateService } from "../services/account-create.service.js";
 import type { AccountListService } from "../services/account-list.service.js";
 import { HttpError } from "../utils/http-error.js";
 import { parseParams } from "../validation/parse-body.js";
@@ -8,7 +9,8 @@ import { PathAccountIdSchema } from "../validation/schemas.js";
 export class AccountController {
   constructor(
     private readonly accountAuction: AccountAuctionService,
-    private readonly accountList: AccountListService
+    private readonly accountList: AccountListService,
+    private readonly accountCreate: AccountCreateService
   ) {}
 
   getById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -20,6 +22,19 @@ export class AccountController {
       const { id } = parseParams(PathAccountIdSchema, req.params);
       const out = await this.accountList.getById(req.user, id);
       res.status(200).json(out);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  create = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) {
+        next(new HttpError(401, "Unauthorized", "unauthorized"));
+        return;
+      }
+      const out = await this.accountCreate.createForStaff(req.user, req.body);
+      res.status(201).json(out);
     } catch (e) {
       next(e);
     }

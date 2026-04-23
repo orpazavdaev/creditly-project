@@ -6,6 +6,7 @@ import { useAuth } from "@/context/auth-context";
 import { apiFetch } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import type { AccountListItem } from "@/types/api";
+import { canCreateAccount } from "@/types/roles";
 import styles from "@/app/ui.module.css";
 
 export default function AccountsPage() {
@@ -39,7 +40,17 @@ export default function AccountsPage() {
   return (
     <>
       <h1 className={styles.pageTitle}>Accounts</h1>
-      <p className={styles.pageSubtitle}>Accounts you can access in this workspace.</p>
+      <p className={styles.pageSubtitle}>
+        Accounts you can access in this workspace.
+        {user && canCreateAccount(user.role) && (
+          <>
+            {" "}
+            <Link href="/accounts/new" className={styles.link}>
+              New account
+            </Link>
+          </>
+        )}
+      </p>
       {rows.length === 0 ? (
         <div className={styles.card}>
           <p className={styles.muted}>No accounts yet.</p>

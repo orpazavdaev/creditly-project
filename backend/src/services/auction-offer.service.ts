@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { EventBus } from "../event-bus/event-bus.js";
 import { publishEventCreated } from "../event-bus/publish-domain-event.js";
 import { HttpError } from "../utils/http-error.js";
+import { emailLocalPart } from "../utils/email-display.js";
 import { parseBody } from "../validation/parse-body.js";
 import { SubmitOfferBodySchema } from "../validation/schemas.js";
 import { eventTypeToApi } from "../utils/event-type-api.js";
@@ -126,6 +127,7 @@ export class AuctionOfferService {
           type: eventTypeToApi(eventRow.type),
           createdAt: eventRow.createdAt.toISOString(),
           metadata: eventRow.metadata,
+          createdByLabel: emailLocalPart(banker.email),
         },
       });
     } catch (e) {

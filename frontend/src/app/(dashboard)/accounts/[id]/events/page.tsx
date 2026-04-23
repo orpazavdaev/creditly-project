@@ -162,7 +162,12 @@ export default function AccountEventsPage() {
           ) : (
             eventsQ.data.events.map((e) => (
               <li key={e.id} className={styles.cardRow}>
-                <span style={{ fontWeight: 600 }}>{e.type}</span>
+                <div>
+                  <span style={{ fontWeight: 600 }}>{e.type}</span>
+                  <span className={styles.muted} style={{ fontSize: "0.85rem", marginLeft: "0.5rem" }}>
+                    by {e.createdByLabel}
+                  </span>
+                </div>
                 <span className={styles.muted} style={{ fontSize: "0.85rem" }}>
                   {e.createdAt}
                 </span>

@@ -21,7 +21,15 @@ export const SpecialisationEnum = z.enum([
 
 export const OpenAuctionBodySchema = z
   .object({
-    classification: SpecialisationEnum.optional(),
+    classification: SpecialisationEnum,
+  })
+  .strict();
+
+export const CreateAccountBodySchema = z
+  .object({
+    costumerName: z.string().min(1, "Customer name is required"),
+    costumerEmail: z.string().min(1).email("Invalid email"),
+    costumerPhone: z.string().min(1, "Phone is required"),
   })
   .strict();
 

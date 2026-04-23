@@ -68,6 +68,7 @@ describe("EventService RBAC for timeline writes", () => {
       { accountId: "acc1", type: "note_added", metadata: { note: "x" } }
     );
     expect(out.event.type).toBe("note_added");
+    expect(out.event.createdByLabel).toBe("u");
     expect(repo.create).toHaveBeenCalled();
   });
 });

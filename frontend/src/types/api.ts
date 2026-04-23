@@ -18,8 +18,12 @@ export type AccountDetailItem = AccountListItem & {
   auction: {
     id: string;
     status: string;
+    openedAt: string;
     expiresAt: string;
+    closedAt: string | null;
     classification: string;
+    winningOffer: { totalInterestRate: number; bankName: string } | null;
+    canCloseAuction: boolean;
   } | null;
 };
 
@@ -30,6 +34,18 @@ export type EventRow = {
   type: string;
   createdAt: string;
   metadata: unknown;
+  createdByLabel: string;
+};
+
+export type AdminAllAuctionRow = {
+  id: string;
+  accountId: string;
+  classification: string;
+  status: string;
+  openedAt: string;
+  expiresAt: string;
+  closedAt: string | null;
+  winningOffer: { totalInterestRate: number; bankName: string } | null;
 };
 
 export type BankerAuctionRow = {

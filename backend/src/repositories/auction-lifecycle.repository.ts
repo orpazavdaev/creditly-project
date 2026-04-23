@@ -5,6 +5,7 @@ export type AuctionCloseRow = {
   id: string;
   accountId: string;
   status: "OPEN" | "EXPIRED" | "CLOSED";
+  expiresAt: Date;
   _count: { bankOffers: number };
 };
 
@@ -39,8 +40,16 @@ export class AuctionLifecycleRepository {
         id: true,
         accountId: true,
         status: true,
+        expiresAt: true,
         _count: { select: { bankOffers: true } },
       },
+    });
+  }
+
+  async finalizeExpiredWithoutBids(auctionId: string): Promise<void> {
+    await prisma.auctionOpportunity.updateMany({
+      where: { id: auctionId, status: "EXPIRED" },
+      data: { status: "CLOSED" },
     });
   }
 

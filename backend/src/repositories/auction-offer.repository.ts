@@ -11,6 +11,7 @@ export type BankerForSubmit = {
   bankId: string | null;
   specialisation: string[];
   role: string;
+  email: string;
 };
 
 const DUPLICATE_OFFER_MSG = "DUPLICATE_OFFER";
@@ -45,7 +46,7 @@ export class AuctionOfferRepository {
   findBankerForSubmit(userId: string): Promise<BankerForSubmit | null> {
     return prisma.user.findUnique({
       where: { id: userId },
-      select: { bankId: true, specialisation: true, role: true },
+      select: { bankId: true, specialisation: true, role: true, email: true },
     });
   }
 

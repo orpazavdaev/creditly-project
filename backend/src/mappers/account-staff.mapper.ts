@@ -18,8 +18,12 @@ export type AccountStaffDetailItem = AccountStaffListItem & {
   auction: {
     id: string;
     status: string;
+    openedAt: string;
     expiresAt: string;
+    closedAt: string | null;
     classification: string;
+    winningOffer: { totalInterestRate: number; bankName: string } | null;
+    canCloseAuction: boolean;
   } | null;
 };
 
@@ -42,14 +46,24 @@ export function toAccountStaffListItem(row: AccountStaffListRow): AccountStaffLi
 export function toAccountStaffDetailItem(row: AccountStaffDetailRow): AccountStaffDetailItem {
   const base = toAccountStaffListItem(row);
   const auc = row.auctionOpportunity;
+  const now = new Date();
   return {
     ...base,
     auction: auc
       ? {
           id: auc.id,
           status: auc.status,
+          openedAt: auc.openedAt.toISOString(),
           expiresAt: auc.expiresAt.toISOString(),
+          closedAt: auc.closedAt ? auc.closedAt.toISOString() : null,
           classification: auc.classification,
+          winningOffer: auc.winningOffer
+            ? {
+                totalInterestRate: auc.winningOffer.totalInterestRate,
+                bankName: auc.winningOffer.bank.name,
+              }
+            : null,
+          canCloseAuction: auc.status !== "CLOSED" && auc.expiresAt.getTime() <= now.getTime(),
         }
       : null,
   };

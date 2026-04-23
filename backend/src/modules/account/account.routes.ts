@@ -9,6 +9,8 @@ export function createAccountRouter(env: AppEnv, controller: AccountController):
   const auth = authenticateJWT(env);
   const staffOnly = requireRoles(["ADMIN", "MANAGER", "USER"], { allowAdminBypass: false });
   const managerAdminOnly = requireRoles(["ADMIN", "MANAGER"], { allowAdminBypass: false });
+  r.post("/", auth, managerAdminOnly, controller.create);
+  r.get("/", auth, staffOnly, controller.list);
   r.get("/:id", auth, staffOnly, controller.getById);
   r.post(
     "/:id/auctions",
@@ -17,6 +19,5 @@ export function createAccountRouter(env: AppEnv, controller: AccountController):
     managerAdminOnly,
     controller.createAuctionForAccount
   );
-  r.get("/", auth, staffOnly, controller.list);
   return r;
 }

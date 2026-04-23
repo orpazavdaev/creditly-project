@@ -3,12 +3,23 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import type { AccountDetailItem } from "@/types/api";
-import { canOpenAuction } from "@/types/roles";
+import {
+  canManageAuctionForAccount,
+  canOpenAuction,
+} from "@/types/roles";
 import { useAuth } from "@/context/auth-context";
 import styles from "@/app/ui.module.css";
+
+const CLASSIFICATIONS = [
+  "NEW_MORTGAGE",
+  "REFINANCE",
+  "PERSONAL_LOAN",
+  "BUSINESS_LOAN",
+] as const;
 
 export default function AccountDetailPage() {
   const params = useParams();
@@ -16,6 +27,7 @@ export default function AccountDetailPage() {
   const router = useRouter();
   const qc = useQueryClient();
   const { user } = useAuth();
+  const [classification, setClassification] = useState<string>("NEW_MORTGAGE");
 
   const q = useQuery({
     queryKey: user ? queryKeys.account(user.id, id) : ["account", id, "pending"],
@@ -31,15 +43,45 @@ export default function AccountDetailPage() {
         `/accounts/${encodeURIComponent(id)}/auctions`,
         {
           method: "POST",
-          json: {},
+          json: { classification },
         }
       ),
     onSuccess: () => {
       if (!user) return;
       void qc.invalidateQueries({ queryKey: queryKeys.accounts(user.id) });
       void qc.invalidateQueries({ queryKey: queryKeys.account(user.id, id) });
+      if (user.role === "ADMIN") {
+        void qc.invalidateQueries({ queryKey: queryKeys.staffAuctionsAll(user.id) });
+      }
     },
   });
+
+  const closeAuction = useMutation({
+    mutationFn: (auctionId: string) =>
+      apiFetch(`/auctions/${encodeURIComponent(auctionId)}/close`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      if (!user) return;
+      void qc.invalidateQueries({ queryKey: queryKeys.accounts(user.id) });
+      void qc.invalidateQueries({ queryKey: queryKeys.account(user.id, id) });
+      if (user.role === "ADMIN") {
+        void qc.invalidateQueries({ queryKey: queryKeys.staffAuctionsAll(user.id) });
+      }
+    },
+  });
+
+  const canManageAuction = Boolean(user && account && canManageAuctionForAccount(user, account));
+
+  const showOpenAuction =
+    Boolean(user) &&
+    canOpenAuction(user!.role) &&
+    account?.status === "READY_FOR_AUCTION" &&
+    !account.auction &&
+    canManageAuction;
+
+  const showCloseAuction =
+    Boolean(user && account?.auction && account.auction.canCloseAuction) && canManageAuction;
 
   if (q.isPending) {
     return <p className={styles.muted}>Loading…</p>;
@@ -63,7 +105,7 @@ export default function AccountDetailPage() {
     );
   }
 
-  const showAuctionCta = user && canOpenAuction(user.role) && account.status === "READY_FOR_AUCTION";
+  const auc = account.auction;
 
   return (
     <>
@@ -85,11 +127,20 @@ export default function AccountDetailPage() {
           <dd className={styles.dd}>{account.lastActivity}</dd>
           <dt className={styles.dt}>CRM sync</dt>
           <dd className={styles.dd}>{account.syncStatus}</dd>
-          {account.auction && (
+          {auc && (
             <>
               <dt className={styles.dt}>Auction</dt>
               <dd className={styles.dd}>
-                {account.auction.status} · ends {account.auction.expiresAt} · {account.auction.classification}
+                <div>Status: {auc.status}</div>
+                <div>Classification: {auc.classification.replace(/_/g, " ")}</div>
+                <div>Opened: {new Date(auc.openedAt).toLocaleString()}</div>
+                <div>Expires: {new Date(auc.expiresAt).toLocaleString()}</div>
+                {auc.closedAt && <div>Closed: {new Date(auc.closedAt).toLocaleString()}</div>}
+                {auc.status === "CLOSED" && auc.winningOffer && (
+                  <div style={{ marginTop: "0.35rem" }}>
+                    Winning offer: {auc.winningOffer.totalInterestRate}% from {auc.winningOffer.bankName}
+                  </div>
+                )}
               </dd>
             </>
           )}
@@ -104,14 +155,42 @@ export default function AccountDetailPage() {
           <Link href={`/accounts/${account.id}/events`} className={styles.btnSecondary} style={{ display: "inline-block", textAlign: "center" }}>
             View events
           </Link>
-          {showAuctionCta && (
+          {showOpenAuction && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
+              <label className={styles.muted} htmlFor="cls">
+                Classification
+              </label>
+              <select
+                id="cls"
+                className={styles.input}
+                style={{ width: "auto", minWidth: "11rem" }}
+                value={classification}
+                onChange={(e) => setClassification(e.target.value)}
+              >
+                {CLASSIFICATIONS.map((c) => (
+                  <option key={c} value={c}>
+                    {c.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className={styles.btn}
+                disabled={createAuction.isPending}
+                onClick={() => createAuction.mutate()}
+              >
+                {createAuction.isPending ? "Opening…" : "Open auction"}
+              </button>
+            </div>
+          )}
+          {showCloseAuction && auc && (
             <button
               type="button"
-              className={styles.btn}
-              disabled={createAuction.isPending}
-              onClick={() => createAuction.mutate()}
+              className={styles.btnSecondary}
+              disabled={closeAuction.isPending}
+              onClick={() => closeAuction.mutate(auc.id)}
             >
-              {createAuction.isPending ? "Opening…" : "Open auction"}
+              {closeAuction.isPending ? "Closing…" : "Close auction (after expiry)"}
             </button>
           )}
         </div>
@@ -122,9 +201,16 @@ export default function AccountDetailPage() {
               : "Could not open auction"}
           </div>
         )}
+        {closeAuction.isError && (
+          <div className={styles.errorBox} style={{ marginTop: "1rem", marginBottom: 0 }}>
+            {closeAuction.error instanceof ApiRequestError
+              ? closeAuction.error.message
+              : "Could not close auction"}
+          </div>
+        )}
         {createAuction.isSuccess && createAuction.data?.auction?.id && (
           <p className={styles.muted} style={{ marginTop: "1rem" }}>
-            Auction created. Bankers can see it under matching specialisation.
+            Auction created. Bankers with matching specialisation can submit offers.
           </p>
         )}
       </div>
