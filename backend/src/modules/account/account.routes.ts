@@ -7,8 +7,8 @@ import { requireRoles } from "../../middleware/require-role.js";
 export function createAccountRouter(env: AppEnv, controller: AccountController): Router {
   const r = Router();
   const auth = authenticateJWT(env);
-  const staffOnly = requireRoles(["ADMIN", "MANAGER", "USER"], { allowAdminBypass: false });
-  const managerAdminOnly = requireRoles(["ADMIN", "MANAGER"], { allowAdminBypass: false });
+  const staffOnly = requireRoles(["ADMIN", "MANAGER", "USER"]);
+  const managerAdminOnly = requireRoles(["ADMIN", "MANAGER"]);
   r.post("/", auth, managerAdminOnly, controller.create);
   r.get("/", auth, staffOnly, controller.list);
   r.get("/:id", auth, staffOnly, controller.getById);
