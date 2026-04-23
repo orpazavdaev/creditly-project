@@ -11,6 +11,6 @@ export class AnalyticsService {
       const raw = await this.repo.summarizeForScope(null);
       return { summary: toAnalyticsSummaryApi(raw) };
     }
-    throw new HttpError(403, "Forbidden", "forbidden");
+    throw new HttpError(403, "Forbidden", "forbidden")
   }
 }
