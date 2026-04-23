@@ -6,14 +6,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { API_BASE } from "@/lib/config";
+import { useAuth } from "@/context/auth-context";
 import type { AccountListItem, EventRow } from "@/types/api";
+import { canRecordDocumentUploadAndNotes } from "@/types/roles";
 import styles from "@/app/ui.module.css";
 
 export default function AccountEventsPage() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
   const qc = useQueryClient();
+  const { user } = useAuth();
   const [note, setNote] = useState("");
+  const canAct = user ? canRecordDocumentUploadAndNotes(user.role) : false;
 
   const accountQ = useQuery({
     queryKey: ["accounts", API_BASE],
@@ -45,6 +49,21 @@ export default function AccountEventsPage() {
     },
   });
 
+  const uploadDocument = useMutation({
+    mutationFn: () =>
+      apiFetch<{ event: EventRow }>("/events", {
+        method: "POST",
+        json: {
+          accountId: id,
+          type: "document_uploaded",
+          metadata: { source: "ui" },
+        },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["events", API_BASE, id] });
+    },
+  });
+
   if (accountQ.isPending) return <p className={styles.muted}>Loading…</p>;
   if (accountQ.isError) {
     return <div className={styles.errorBox}>{accountQ.error instanceof Error ? accountQ.error.message : "Error"}</div>;
@@ -69,33 +88,62 @@ export default function AccountEventsPage() {
           ← {account.costumerName}
         </Link>
       </p>
-      <div className={styles.card} style={{ marginBottom: "1.25rem" }}>
-        <p className={styles.muted} style={{ marginBottom: "0.75rem" }}>
-          Add a note (creates a timeline event).
-        </p>
-        <div className={styles.stack}>
-          <textarea
-            className={styles.input}
-            rows={3}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Note text"
-          />
-          <button
-            type="button"
-            className={styles.btn}
-            disabled={!note.trim() || addNote.isPending}
-            onClick={() => addNote.mutate()}
-          >
-            {addNote.isPending ? "Saving…" : "Add note"}
-          </button>
-        </div>
-        {addNote.isError && (
-          <div className={styles.errorBox} style={{ marginTop: "0.75rem", marginBottom: 0 }}>
-            {addNote.error instanceof ApiRequestError ? addNote.error.message : "Failed"}
+      {canAct ? (
+        <div className={styles.card} style={{ marginBottom: "1.25rem" }}>
+          <div className={styles.stack}>
+            <div>
+              <p className={styles.muted} style={{ marginBottom: "0.5rem" }}>
+                Document uploaded
+              </p>
+              <button
+                type="button"
+                className={styles.btnSecondary}
+                disabled={uploadDocument.isPending}
+                onClick={() => uploadDocument.mutate()}
+              >
+                {uploadDocument.isPending ? "Recording…" : "Record document upload"}
+              </button>
+              {uploadDocument.isError && (
+                <div className={styles.errorBox} style={{ marginTop: "0.5rem", marginBottom: 0 }}>
+                  {uploadDocument.error instanceof ApiRequestError
+                    ? uploadDocument.error.message
+                    : "Failed"}
+                </div>
+              )}
+            </div>
+            <div>
+              <p className={styles.muted} style={{ marginBottom: "0.5rem" }}>
+                Add a note
+              </p>
+              <textarea
+                className={styles.input}
+                rows={3}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Note text"
+              />
+              <button
+                type="button"
+                className={styles.btn}
+                style={{ marginTop: "0.5rem" }}
+                disabled={!note.trim() || addNote.isPending}
+                onClick={() => addNote.mutate()}
+              >
+                {addNote.isPending ? "Saving…" : "Add note"}
+              </button>
+              {addNote.isError && (
+                <div className={styles.errorBox} style={{ marginTop: "0.5rem", marginBottom: 0 }}>
+                  {addNote.error instanceof ApiRequestError ? addNote.error.message : "Failed"}
+                </div>
+              )}
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <p className={styles.muted} style={{ marginBottom: "1.25rem" }}>
+          Document upload and notes can be added by administrators or assigned users only.
+        </p>
+      )}
       {eventsQ.isPending && <p className={styles.muted}>Loading events…</p>}
       {eventsQ.isError && (
         <div className={styles.errorBox}>

@@ -11,3 +11,7 @@ export function isBankerRole(role: string): boolean {
 export function canOpenAuction(role: string): boolean {
   return role === "ADMIN" || role === "MANAGER";
 }
+
+export function canRecordDocumentUploadAndNotes(role: string): boolean {
+  return role === "ADMIN" || role === "USER";
+}
