@@ -1,43 +1,204 @@
-# Creditly monorepo
+# Creditly
 
-Separate `backend` and `frontend` packages so each can evolve, deploy, and scale independently while staying easy to run locally.
+Creditly is a monorepo for a lending workflow prototype: internal staff manage **accounts** and **auctions**, while **bankers** participate in **blind** rate auctions without receiving customer-identifying data through the public API. The stack is **Express + Prisma + PostgreSQL** (API) and **Next.js App Router** (web), with an in-process event bus for reactions after domain events are persisted.
 
-## Layout
+---
 
-- `backend` — Node.js, TypeScript, Express. Source under `src/` with a thin composition root (`index.ts`, `app.ts`) and feature-oriented wiring.
-- `frontend` — Next.js App Router and TypeScript. UI, routing, and data-fetching live here; the API stays in the backend.
+## Monorepo layout
 
-## Why this backend structure
+| Package | Role |
+| -------- | ---- |
+| `backend/` | REST API, auth, RBAC, Prisma, domain services, in-process event bus |
+| `frontend/` | Next.js UI, React Query, role-aware navigation and pages |
 
-- **`modules/`** — Route registration and HTTP surface per feature. Keeps `app.ts` small and makes it obvious where new endpoints are mounted.
-- **`controllers/`** — Translate HTTP (params, body, status) to service calls. No business rules beyond validation and response shaping.
-- **`services/`** — Use cases and orchestration. This is where domain logic should grow; controllers and repositories stay thin.
-- **`repositories/`** — Persistence and data access. Starting with a repository per aggregate keeps SQL/ORM details out of services.
-- **`integration/`** — Outbound HTTP or third-party SDKs. Isolates external systems from your core services so failures and retries are easier to reason about.
-- **`event-bus/`** — Lightweight in-process pub/sub for cross-module reactions without tight coupling. Swap for a broker later if needed.
-- **`jobs/`** — In-process scheduled work (for example refresh-token cleanup).
-- **`middleware/`** — Cross-cutting HTTP concerns (errors, request IDs, auth).
-- **`utils/`** and **`types/`** — Small shared helpers and shared TypeScript shapes.
+Each package installs and runs independently. The browser talks to the API via `NEXT_PUBLIC_API_URL` with credentials enabled for refresh cookies.
 
-The goal is **clear boundaries** without extra frameworks: Express stays the delivery mechanism; folders express responsibility so the codebase stays navigable as it grows.
+---
 
-## Why Next.js App Router here
+## Architecture
 
-Server Components and file-based routing fit document-style and marketing pages; client components (for example with React Query) fit interactive data and caching. React Query is used for **client-side fetching**, caching, and error states when talking to the REST API.
+The backend follows a **layered** structure so HTTP, use cases, and persistence stay separated:
 
-## Running locally
+- **`index.ts` / `app.ts`** — Process bootstrap: load env, register event-bus listeners once, create Express app, start jobs (for example refresh-token cleanup), listen on a port.
+- **`modules/`** — Route factories: mount paths, stack middleware (`authenticateJWT`, `requireRole` / `requireRoles`), delegate to controllers.
+- **`controllers/`** — Map HTTP (params, body, status codes) to service calls; no business rules beyond basic validation.
+- **`services/`** — Use cases and orchestration (accounts, auctions, offers, events, auth, CRM stub, domain rules on events).
+- **`repositories/`** — Prisma access and query shapes; keeps SQL/ORM details out of services.
+- **`mappers/`** — API-facing DTOs (for example stripping fields for banker responses).
+- **`event-bus/`** — Lightweight **in-process** pub/sub (`EventBus`: `on` / `emit`). Used for reactions after a row is written, not as a replacement for HTTP.
+- **`middleware/`** — Auth, errors, request context.
+- **`integration/`** — Outbound HTTP or external SDKs (kept thin for future real CRM).
+- **`jobs/`** — Scheduled in-process tasks.
 
-Terminal 1 — API:
+The frontend uses the **App Router**, **React Query** for server state, a shared **`apiFetch`** helper, and **`AuthProvider`** for access tokens plus refresh via cookies.
+
+---
+
+## Database design
+
+PostgreSQL is the system of record. Prisma models express the domain:
+
+**Identity and org**
+
+- **`User`** — `email` (unique), `passwordHash`, `role` (`ADMIN` \| `MANAGER` \| `USER` \| `BANKER`), optional `bankId`, `specialisation` (for bankers, aligned with product types).
+- **`Bank`** — Lending institution; bankers belong to a bank.
+- **`RefreshToken`** — Stores only a **hash** of the refresh token plus `userId` and `expiresAt` (see Token strategy).
+
+**Accounts and access**
+
+- **`Account`** — Customer-facing record: manager (`managerId`), contact fields (`costumerName`, `costumerEmail`, `costumerPhone`), `status` (`NEW` → `READY_FOR_AUCTION` → `AUCTION_OPEN` → `WON`), activity and CRM sync fields (`lastActivity`, `isHighActivity`, `syncStatus`, `failureReason`).
+- **`AccountUser`** — Many-to-many **assignments** so a `USER` can collaborate on an account without being the manager.
+
+**Audit timeline**
+
+- **`Event`** — Append-only style log per account: `accountId`, `userId`, `type` (`EventType` enum), `metadata` (JSON), `createdAt`. Serves staff timelines and downstream automation.
+
+**Auctions and offers**
+
+- **`AuctionOpportunity`** — At most **one open auction per account** (`accountId` unique). Tracks `classification` (matches banker specialisation), `status` (`OPEN` \| `EXPIRED` \| `CLOSED`), `openedBy`, `openedAt`, `expiresAt`, `closedAt`, optional `winningOfferId`.
+- **`BankOffer`** — A banker’s single bid: `totalInterestRate`, `bankId`, `bankerId`, link to auction. Uniqueness of “one offer per banker per auction” is enforced in the offer transaction path.
+
+**Enums** (`UserRole`, `Specialisation`, `AccountStatus`, `SyncStatus`, `EventType`, `AuctionOpportunityStatus`) keep states explicit in the schema and in Prisma Client types.
+
+---
+
+## Role-based access control (RBAC)
+
+**Roles**
+
+- **`ADMIN`** — Full staff visibility where middleware allows it; **resource checks** still apply on account-scoped routes (see below).
+- **`MANAGER`** — Owns accounts (`Account.managerId`); opens and closes auctions for those accounts.
+- **`USER`** — Access only to **assigned** accounts (`AccountUser`).
+- **`BANKER`** — Participates in auctions and offers; **must not** see account lists, account detail, or customer PII through staff APIs.
+
+**HTTP layer**
+
+- **`authenticateJWT`** — Validates the Bearer access JWT and sets `req.user` (`id`, `email`, `role`).
+- **`requireRole` / `requireRoles`** — Enforces allowed roles. By default **`ADMIN` bypasses** the allow-list (`allowAdminBypass` defaults to true). Some routes **disable** that bypass so only real bankers hit banker-only surfaces (for example `GET /auctions` and offer routes).
+
+**Resource-level rules (`AccountAccessService`)**
+
+Staff routes that touch a specific account (`/events`, account auctions, auction close, and similar) call **`assertStaffCanAccessAccount`**: bankers are rejected with **403**; unknown or out-of-scope accounts return **404** (to avoid leaking existence). **`ADMIN`** passes; **`MANAGER`** must match `managerId`; **`USER`** must appear in `AccountUser`.
+
+**Event creation**
+
+- **`DOCUMENT_UPLOADED`** and **`NOTE_ADDED`** may be created only by **`ADMIN`** or **`USER`** (after access checks). **`MANAGER`** receives **403** for those types even on owned accounts, matching the product rule that uploads and free-form notes are not manager-authored in this prototype.
+
+**Account listing**
+
+- **`GET /accounts`** — **`AccountListService`** rejects **`BANKER`** with **403**; other roles receive scoped lists.
+
+Together, RBAC is **defense in depth**: route guards for coarse role boundaries, services for data scope and blind-auction behavior.
+
+---
+
+## Blind auction model
+
+A **blind** auction here means bankers compete on **rate** and **timing** without the API disclosing **which customer** an auction belongs to.
+
+**What bankers see**
+
+- **Auction list** (`GET /auctions`) returns items with **`id`**, **`classification`**, **`status`**, **`openedAt`**, **`expiresAt`**, **`closedAt`** — no `accountId`, no customer contact fields (`banker-auction-list.mapper`).
+- **Offer submission** persists internally with `accountId` for integrity, but the **HTTP response** maps the related event through **`mapBankerSubmitOfferResponse`**, which **omits `accountId`** from the `event` object returned to the client.
+
+**Rules**
+
+- Bankers must match auction **`classification`** against their **`specialisation`** array.
+- **One offer per banker per auction**; duplicates yield **409**.
+- Auction must be **`OPEN`** and not past **`expiresAt`** at submission time; expiration can be applied lazily when interacting with that auction.
+
+**Closing and outcomes**
+
+- Staff (**`MANAGER`** / **`ADMIN`**) close an auction via **`POST /auctions/:id/close`**, which records an **`AUCTION_CLOSED`** domain event; business logic then runs on the event pipeline.
+- **Winner selection**: among offers, lowest **`totalInterestRate`** wins; ties break on **earliest `createdAt`** (repository `orderBy`).
+- **No offers**: auction becomes **`EXPIRED`** (not **`CLOSED`** / no **`WON`** on the account). **With offers**: auction **`CLOSED`**, **`winningOfferId`** set, account **`WON`**.
+
+The database still stores foreign keys linking offers to accounts; **blindness is enforced at the API and authorization layers**, not by erasing relational data.
+
+---
+
+## Event-driven design
+
+Two related concepts coexist:
+
+1. **Persisted `Event` rows** — The audit **timeline** per account. Created through **`EventService`** (and other flows that write events). **`userId` on the row always comes from the authenticated user**, never from an untrusted body field.
+
+2. **In-process `EventBus`** — After insert, **`publishEventCreated`** emits **`event.created`** with a **`DomainEventCreatedPayload`** so subscribers can run **without** bloating the HTTP handler.
+
+**Listeners** (registered in **`registerEventBusListeners`** before the app accepts traffic):
+
+- **Domain event pipeline** — On **`event.created`**, runs **`DomainEventBusinessService.applyOnEventCreated`** (document → account readiness, rolling high-activity flag, auction close / expire / win selection) and then **`CrmService.handleAfterDomainEvent`** so CRM side effects do not race the same business step.
+- **Winning offer** — When a winner is chosen, **`DomainEventBusinessService`** emits **`winning.offer.selected`**; a dedicated listener calls **`CrmService.handleWinningOfferSelected`**.
+
+**CRM** in this repo is a **mock** with random failures to exercise **`Account.syncStatus`** / **`failureReason`**.
+
+**Trade-off:** handlers run **after** the HTTP response path has committed the primary write; failures in subscribers are logged but do not roll back the `Event` row. See Assumptions and trade-offs.
+
+---
+
+## Token strategy
+
+| Artifact | Transport | Lifetime | Storage server-side |
+| -------- | ----------- | -------- | -------------------- |
+| **Access token** | `Authorization: Bearer` | Short (default **900s** via `ACCESS_TOKEN_EXPIRES_SECONDS`) | Not stored; JWT signed with `JWT_SECRET` |
+| **Refresh token** | **HttpOnly** cookie (name from `REFRESH_TOKEN_COOKIE`, default `refreshToken`, path **`/auth`**) | Long (default **7 days** via `REFRESH_TOKEN_EXPIRES_DAYS`) | **SHA-256 hash** only in **`RefreshToken`** |
+
+**Login** returns `{ accessToken, expiresIn }` and sets the refresh cookie. **Refresh** reads the cookie, verifies the hash, **deletes the old row**, issues a **new** refresh (rotation), and returns a new access token. **Register** does not start a session (no tokens), so “identity exists” and “session started” stay distinct.
+
+**Client guidance:** keep access tokens in **memory** where possible; avoid `localStorage` for refresh material because the cookie is already HttpOnly. **CORS** uses **`credentials: true`** and a configured **`CORS_ORIGIN`** so browsers send cookies only to the intended API origin.
+
+Expired refresh rows are removed on a periodic **cleanup job** so the table does not grow without bound.
+
+---
+
+## Prisma and schema evolution (no committed migrations)
+
+This repository ships **`prisma/schema.prisma`** and uses **`prisma db push`** (`npm run db:push`) to align a **development** database with the schema **without** generating SQL migration history.
+
+**Why no `prisma/migrations` folder**
+
+- Early-stage and demo-friendly: schema changes apply quickly, with less merge friction on migration files.
+- Disposable local databases match the model in seconds.
+
+**What you should do for production**
+
+- Introduce **versioned migrations** (`prisma migrate dev` in development, **`prisma migrate deploy`** in CI/CD) once the schema stabilizes. Migrations give repeatable, reviewable DDL, auditable rollouts, and safe evolution on shared databases.
+
+**Prisma 7 configuration**
+
+- **`prisma.config.ts`** defines the datasource URL and wires **`prisma db seed`** to **`tsx prisma/seed.ts`**. Run **`npm run db:seed`** after push when you need deterministic demo data.
+
+---
+
+## Assumptions and trade-offs
+
+- **In-process event bus** — Simple and fast, but not durable: a crash after `emit` starts async work can drop side effects. Replacing with a queue or outbox would be the next step for hard reliability.
+- **JWT claims** — `role` is fixed until refresh; revoking access for a compromised token before expiry may require a denylist or very short access TTL (not implemented here).
+- **Blind auctions** — Privacy is enforced by **API design and RBAC**, not by removing relational integrity in the database.
+- **Lazy auction expiration** — Some paths explicitly expire overdue auctions before reads/writes; there is no separate cron closing every auction at the exact second of `expiresAt`.
+- **CRM** — Simulated random failures only; no real outbound integration or retry budget.
+- **Document upload / notes** — Events can represent uploads and notes; there is no separate blob store or note table in this slice.
+- **Error responses** — Non-HTTP errors are mapped to generic **500** responses so Prisma or stack traces are not leaked to clients (details stay in logs / stderr where applicable).
+- **Monolith process** — API, listeners, and cleanup job share one Node process; horizontal scaling would require externalizing sessions, bus, and jobs.
+
+---
+
+## Getting started
+
+**Database**
 
 ```bash
 cd backend
 npm install
+npm run db:up
+npm run db:push
+npm run db:seed
 npm run dev
 ```
 
-Default URL: `http://localhost:3001` (see `backend/.env.example`).
+Default API: `http://localhost:3001` (see `backend/.env.example` for `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`, token TTLs).
 
-Terminal 2 — web:
+**Frontend**
 
 ```bash
 cd frontend
@@ -45,164 +206,28 @@ npm install
 npm run dev
 ```
 
-Default URL: `http://localhost:3000`. Set `NEXT_PUBLIC_API_URL` in `frontend/.env` to match the API origin (see `frontend/.env.example`).
+Set `NEXT_PUBLIC_API_URL` in `frontend/.env` to the API origin (see `frontend/.env.example`).
 
-## Scripts
+---
 
-| Location  | Command        | Purpose              |
-| --------- | -------------- | -------------------- |
-| `backend` | `npm run dev`  | API with reload      |
-| `backend` | `npm run build` / `npm start` | Production build and run |
+## Scripts (reference)
+
+| Location | Command | Purpose |
+| -------- | ------- | ------- |
+| `backend` | `npm run dev` | API with reload |
+| `backend` | `npm run build` / `npm start` | Compile and run production |
+| `backend` | `npm run test` | Vitest suite under `backend/tests/` |
 | `backend` | `npm run lint` / `npm run format` | ESLint / Prettier |
-| `backend` | `npm run db:up` | Start local Postgres via Docker Compose |
-| `backend` | `npm run db:push` | Apply `schema.prisma` to Postgres (`prisma db push`) |
-| `backend` | `npm run db:generate` / `npm run db:validate` | Prisma Client / schema check |
-| `frontend`| `npm run dev`  | Next dev server      |
-| `frontend`| `npm run build` / `npm start` | Production         |
-| `frontend`| `npm run lint` / `npm run format` | ESLint / Prettier |
+| `backend` | `npm run db:up` | Local Postgres (Docker Compose) |
+| `backend` | `npm run db:push` | Apply schema (`prisma db push`) |
+| `backend` | `npm run db:seed` | Seed demo data |
+| `frontend` | `npm run dev` | Next.js dev server |
+| `frontend` | `npm run build` / `npm start` | Production build and run |
 
-## Database (Prisma and PostgreSQL)
+`npm run build` in the backend runs **`prisma generate`** before **`tsc`**.
 
-The API uses Prisma with PostgreSQL. Configure `DATABASE_URL` in `backend/.env` (see `backend/.env.example`). With Docker available, you can start Postgres from `backend` with `npm run db:up` (uses `docker-compose.yml`). Then:
-
-```bash
-npm run db:push
-```
-
-`npm run build` runs `prisma generate` before the TypeScript compile.
-
-### Why `db push` for local development, and migrations for production
-
-`prisma db push` updates the database to match `schema.prisma` without writing migration files. That keeps iteration fast when the model is still moving and the database is disposable or personal: you avoid migration history, merge conflicts on SQL files, and drift between “what migrate thinks” and “what the DB actually has” during early design.
-
-For **production** (and usually shared staging), prefer **versioned migrations** (`prisma migrate dev` in development, `prisma migrate deploy` in CI/CD). Migrations give repeatable, auditable schema changes, peer review of DDL, controlled rollout, and a clear upgrade path across environments. Use **`db push`** where losing or resetting the schema is acceptable; use **`migrate deploy`** where the database must evolve safely with the codebase.
-
-## Authentication (backend)
-
-### Endpoints
-
-- `POST /auth/register` — body: `email`, `password`, `role` (`ADMIN` | `MANAGER` | `USER` | `BANKER`). Creates the user (password hashed with bcrypt). Returns `201` with `id`, `email`, `role`. No tokens.
-- `POST /auth/login` — body: `email`, `password`. Validates credentials, returns JSON `{ accessToken, expiresIn }` (seconds). Sets an **HttpOnly** cookie (name from `REFRESH_TOKEN_COOKIE`, default `refreshToken`) containing the **raw** refresh token; `path` is `/auth` so it is sent to `/auth/*` only.
-- `POST /auth/refresh` — no body; reads the refresh cookie, looks up **SHA-256** hash in `RefreshToken`, rejects if missing or expired. **Rotates** the refresh: deletes the old row, stores a new hash, sets a new cookie, returns `{ accessToken, expiresIn }`.
-
-### Request flow (why it is shaped this way)
-
-1. **Register** creates identity only. Tokens are not returned so registration cannot be confused with a session: the client explicitly **logs in** when it wants a session, which keeps “account exists” and “session started” as two clear steps and avoids issuing tokens before you know the client can store them safely.
-2. **Login** checks email and password, then issues two artifacts: a **JWT access token** (proof of session for APIs) and a **refresh token** (renewal channel). The access token is returned in JSON so SPAs can hold it in memory; the refresh token is **only** in an HttpOnly cookie so typical JavaScript cannot read it, which reduces exposure to XSS compared to putting refresh material in `localStorage`.
-3. **Calling protected APIs** sends `Authorization: Bearer <accessToken>`. The middleware validates the JWT and attaches `req.user` (`id`, `email`, `role`). No database hit is required for every request, which keeps hot paths fast; role in the token must match what you trust at issuance time (today there is no “role changed mid-session” invalidation—add that later if needed).
-4. **When the access token expires**, the client calls **`POST /auth/refresh`** with credentials mode so the **cookie** is sent. The server hashes the cookie value, finds the row, **deletes** it (rotation), inserts a new refresh hash, and returns a **new** access token. Rotation means a stolen refresh token stops working after the legitimate client refreshes once.
-5. **Errors** surface as JSON via `HttpError` and the global error handler (`401` for auth, `409` for duplicate email, and so on).
-
-### Token flow
-
-1. **Access token** — short-lived JWT (`ACCESS_TOKEN_EXPIRES_SECONDS`, default 900). Sent in `Authorization: Bearer <token>`. Keep it in memory on the client; do not store it in `localStorage` if you want to limit XSS impact.
-2. **Refresh token** — long-lived opaque random string in an **HttpOnly** cookie (`REFRESH_TOKEN_EXPIRES_DAYS`, default 7). The API never stores the raw value: only **SHA-256** hashes are persisted. On refresh, the previous DB row is **deleted** and a new token is issued (rotation). Compromise of one refresh token invalidates that chain after use.
-3. **`authenticateJWT` middleware** — verifies the JWT signature and expiry, checks `sub`, `email`, and `role`, then sets `req.user`. Use it on routes that require a logged-in user.
-
-### Security choices
-
-- **Bcrypt** for password storage; generic `401` on login failure to avoid email enumeration.
-- **JWT** signed with `JWT_SECRET` (required); production should use a long random secret.
-- **Refresh cookies**: `httpOnly`, `sameSite: lax`, `secure` when `NODE_ENV=production`. **CORS** uses `credentials: true` and a single `CORS_ORIGIN` so browsers can send cookies to the API.
-- **Cleanup**: an in-process job runs **every 12 hours** and deletes refresh tokens with `expiresAt` in the past so the table does not grow forever.
-
-## Authorization (RBAC)
-
-### Request flow
-
-Protected routes use middleware **in order**: **`authenticateJWT`** first (validates the access token and sets `req.user`), then **`requireRole`** or **`requireRoles`** (checks `req.user.role` against allowed roles). If there is no `req.user`, the role guard responds with **`401`**. If the user is authenticated but the role is not allowed, the guard responds with **`403`**. That split makes “not logged in” and “logged in but not permitted” distinct for clients and observability.
-
-### Helpers
-
-- **`requireRoles(allowed[])`** — after authentication, allows the request if `req.user.role` is listed in `allowed`, **or** if the user is **`ADMIN`** (see below).
-- **`requireRole(role)`** — convenience for a single allowed role; implemented as `requireRoles([role])`.
-
-### Decisions
-
-- **`ADMIN` full access** — any user with role `ADMIN` passes every `requireRole` / `requireRoles` check without needing to be listed explicitly. That matches “superuser” expectations and keeps policy rules short for endpoints where admins should always help or override (support, incident response). Non-admin users are still constrained by the explicit allow-list.
-- **No resource ownership yet** — guards only inspect **role**, not whether the user owns the auction, account, or offer. Finer checks (“this manager only sees their accounts”) belong in services or repositories later and should not be implied by the current middleware.
-- **Stub routes** — the table below wires RBAC to minimal handlers so you can verify **403/201** behavior before business logic exists.
-
-### Protected routes (mounted in `app.ts`)
-
-| Method | Path | Role rule (non-admin) | Notes |
-| ------ | ---- | --------------------- | ----- |
-| `POST` | `/auctions` | `MANAGER` only | Admins may create auctions too (`ADMIN` bypass). |
-| `POST` | `/bank-offers` | `BANKER` only | Admins may submit offers too (`ADMIN` bypass). |
-| `GET` | `/accounts` | `MANAGER` or `USER` | **`BANKER` is not allowed** on account routes by design (bank staff use offers, not the shared accounts list in this policy). Admins may list accounts (`ADMIN` bypass). |
-
-## Events (backend + frontend)
-
-Domain **events** are rows in the Prisma **`Event`** model: they tie an **`accountId`**, a **`userId`** (who triggered the activity), a **`type`**, **`metadata`** (JSON), and **`createdAt`**. They are intended as an **audit / activity timeline** for an account, not as a generic message bus (that remains separate under `event-bus/` if you use it).
-
-### Backend: what was added
-
-- **Routes** — `modules/events/event.routes.ts`, mounted at **`/events`** in `app.ts`.
-- **`POST /events`** — Requires **`authenticateJWT`** (`Authorization: Bearer`). Body: **`accountId`** (string), **`type`** (string in **snake_case**), optional **`metadata`** (object; defaults to `{}`). The service checks that the **account exists** (`404` if not), maps **`type`** to the Prisma **`EventType`** enum, and persists **`userId`** from **`req.user.id`** (the JWT subject), not from the body, so callers cannot forge another user’s identity.
-- **`GET /events?accountId=`** — Same auth middleware. **Requires** the **`accountId`** query string; returns **`404`** if the account does not exist. Response is **`{ events: [...] }`**, ordered **newest first**. Each event includes **`type` in snake_case** again for API consistency.
-- **Type mapping** — `utils/event-type-api.ts` maps API strings to Prisma and back. Allowed **`type`** values: `document_uploaded`, `note_added`, `status_changed`, `auction_opened`, `offer_submitted`, `auction_closed`. Invalid or unknown types yield **`400`**.
-- **Layers** — `EventRepository` (Prisma `findMany` / `create` / account existence), `EventService` (validation + mapping + `HttpError`s), `EventController` (wires HTTP, forwards errors to the global handler).
-
-### Simulated actions (no file or note store)
-
-- **`document_uploaded`** — The API **only creates an `Event`** (for example with `metadata: { simulated: true }`). There is **no** file upload pipeline, storage, or virus scan in this codebase yet.
-- **`note_added`** — Same: **only** an event row, typically with **`metadata.note`** holding the text. There is **no** separate `Note` table or persistence beyond that JSON.
-
-That keeps the contract stable when you later add real uploads or notes: you would still emit the same event types after the real work succeeds.
-
-### Frontend: what was added and why
-
-- **App shape (Next.js App Router)** — Split into public auth routes (`/login`, `/register`) and protected dashboard routes under `frontend/src/app/(dashboard)`. This keeps entry points clear and separates auth screens from product flows.
-- **Session handling (`AuthProvider`)** — Centralized session state in `frontend/src/context/auth-context.tsx`, including access-token persistence and refresh-token rotation via `POST /auth/refresh` with credentials. This prevents duplicated auth logic and makes reload recovery predictable.
-- **Role-based UX + guardrails** — `frontend/src/components/AppShell.tsx` renders role-specific navigation, and `frontend/src/components/RequireAuth.tsx` enforces route-level role checks. The UI hides irrelevant areas while guards still protect direct URL access.
-- **API abstraction (`frontend/src/lib/api.ts`)** — Added a single fetch wrapper for base URL, bearer header, JSON requests, and normalized API errors. This keeps page components focused on UI behavior instead of transport details.
-- **React Query for all API state** — Queries and mutations power account lists/details, events, auctions, and offers. Mutations invalidate relevant keys so UI state stays fresh after writes.
-- **Implemented pages**
-  - `frontend/src/app/login/page.tsx` and `frontend/src/app/register/page.tsx`
-  - `frontend/src/app/(dashboard)/accounts/page.tsx`
-  - `frontend/src/app/(dashboard)/accounts/[id]/page.tsx`
-  - `frontend/src/app/(dashboard)/accounts/[id]/events/page.tsx`
-  - `frontend/src/app/(dashboard)/auctions/page.tsx`
-  - `frontend/src/app/(dashboard)/auctions/[id]/offer/page.tsx`
-- **Action visibility tied to policy** — The UI only presents actions the current role/state should perform (for example: account actions for staff roles, auction/offer flows for bankers, submit hidden when auction is not open/valid). Backend authorization remains the source of truth.
-- **Styling decisions (`frontend/src/app/ui.module.css`)** — Introduced a shared shell/card/form/button style system instead of feature-specific CSS modules. This improves visual consistency, loading/error readability, and future maintainability.
-
-### In-process EventBus (domain event → side effects)
-
-After an **`Event`** row is persisted, **`EventService`** publishes **`event.created`** on the shared **`appEventBus`** (`event-bus/app-event-bus.ts`) with a **`DomainEventCreatedPayload`** (`event-bus/domain-events.ts`: ids, Prisma type, API type string, timestamps, metadata).
-
-**Why event-driven here:** HTTP stays thin (validate → write → respond) while **follow-up work** runs through subscribers without growing **`EventService`** with every downstream rule. The HTTP handler returns after the row exists; reactions can evolve independently (CRM stub today, real HTTP later).
-
-**Where it is wired:** **`registerEventBusListeners`** runs once at process startup in **`index.ts`** (before `createApp`) and registers:
-
-- **`event-bus/listeners/domain-event-pipeline.listener.ts`** — single subscriber for **`event.created`**. It **`await`s `applyBusinessRulesOnEventCreated` first, then `CrmService.handleAfterDomainEvent`**, so **account row updates** from business rules and CRM **`syncStatus` / `failureReason`** do not race each other on the same HTTP-triggered event. Each step logs failures to **stderr**; **`emit`** stays synchronous while work runs in an async IIFE.
-- **`event-bus/listeners/crm-integration.listener.ts`** — subscribes to the internal topic **`winning.offer.selected`** (see below) and calls **`CrmService.handleWinningOfferSelected`**.
-
-### CRM integration (mock)
-
-**`services/crm.service.ts`** is a **mock** outbound CRM: **`pushMock`** randomly “fails” (~35%) so you can exercise **`Account.syncStatus`** and **`Account.failureReason`** without a real vendor. **Controllers never call it**; only **event-bus listeners** do, so HTTP stays decoupled from integration concerns.
-
-**Triggers:**
-
-- **`document_uploaded`**, **`status_changed`**, **`auction_opened`** — handled inside **`handleAfterDomainEvent`**, which runs from the **pipeline** after business rules on the same **`event.created`** payload.
-- **`winning_offer_selected`** — there is no separate Prisma **`Event`** row for this today. When **`auction_closed`** business logic picks a **winning `BankOffer`**, **`domain-event-business.service.ts`** emits **`winning.offer.selected`** on **`appEventBus`** with **`{ accountId, auctionId, offerId }`**. **`CrmService.handleWinningOfferSelected`** runs from the **CRM winning listener**, keeping the “something important happened” signal next to the code that already knows the winner.
-
-**On success:** **`syncStatus` → `SUCCESS`**, **`failureReason` → null**. **On mock failure:** **`syncStatus` → `FAILED`**, **`failureReason`** set to the error message (truncated). If persisting that failure throws, the service writes to **stderr** so the process does not crash.
-
-**Why this shape:** one **`CrmService`** centralizes CRM policy and Prisma side effects; listeners stay thin; **pipeline serializes** business vs CRM for **`event.created`**; **internal bus topic** avoids inventing fake HTTP events or re-entering **`event.created`** (which would re-run business rules) when the winner is chosen inside **`domain-event-business`**.
-
-**Business rules (in `domain-event-business.service.ts`):** all run **after** the new `Event` row is visible, so counts and reads include the event that triggered them.
-
-1. **`document_uploaded`** — Updates the **`Account`**: **`status` → `READY_FOR_AUCTION`**, **`lastActivity` → now** (only for this event type, as specified).
-2. **High activity** — Counts **`Event`** rows for that **`accountId`** with **`createdAt` ≥ now − 24h**; if **count > 3**, sets **`Account.isHighActivity`** to **`true`**, otherwise **`false`**. Runs on **every** domain event so the flag tracks the rolling window.
-3. **`auction_closed`** — Loads **`AuctionOpportunity`** by **`accountId`** (1:1). If none, returns. Loads **`bankOffers`** ordered by **`totalInterestRate` ascending**, then **`createdAt` ascending**, so **equal rate → earliest submitted offer wins**. **No offers:** **`AuctionOpportunity.status` → `EXPIRED`**, **`closedAt` set**, **`winningOfferId` cleared** (no **`Account`** status change). **At least one offer:** **`status` → `CLOSED`**, **`winningOfferId`** set to the chosen offer, and **`Account.status` → `WON`** in the same transaction as the auction update.
-
-**Why dedicated service modules:** **`services/domain-event-business.service.ts`** holds account/auction **rules**; **`services/crm.service.ts`** holds **CRM sync + `Account` sync fields** only. Listeners orchestrate **when** those run, not **how** they update the database, which keeps tests and future real CRM clients manageable.
-
-**Why no queue yet:** everything runs **in-process** on the same Node thread. **`EventBus.emit`** wraps each **sync** handler in **`try/catch`**; async business work uses **`.catch`** on the returned promise so failures do not reject inside **`emit`**.
-
-**Consistency note:** the client already received **`201`** before reactions finish. If a reaction fails, the audit row exists but downstream state may be stale—acceptable for this tier; production would add retries, outbox, or idempotent workers.
+---
 
 ## Environment
 
-Each app loads its own env files and documents variables in `backend/.env.example` and `frontend/.env.example`. Real secrets stay out of git via each folder’s `.gitignore`.
+Secrets and deployment-specific values live in **`.env`** files, not in git. Copy **`backend/.env.example`** and **`frontend/.env.example`** and adjust for your machine or deployment.
