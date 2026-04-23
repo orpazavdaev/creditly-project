@@ -10,6 +10,7 @@ import { AuctionOfferController } from "./controllers/auction-offer.controller.j
 import { AuthController } from "./controllers/auth.controller.js";
 import { EventController } from "./controllers/event.controller.js";
 import { AnalyticsController } from "./controllers/analytics.controller.js";
+import { UserController } from "./controllers/user.controller.js";
 import { HealthController } from "./controllers/health.controller.js";
 import { AuthRepository } from "./repositories/auth.repository.js";
 import { EventRepository } from "./repositories/event.repository.js";
@@ -39,6 +40,7 @@ import { createAuctionRouter } from "./modules/auction/auction.routes.js";
 import { createAuthRouter } from "./modules/auth/auth.routes.js";
 import { createEventRouter } from "./modules/events/event.routes.js";
 import { createHealthRouter } from "./modules/health/health.routes.js";
+import { createUsersRouter } from "./modules/users/users.routes.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { notFound } from "./middleware/not-found.js";
 import { requestContext } from "./middleware/request-context.js";
@@ -53,7 +55,7 @@ export function createApp(
   const accountAccess = new AccountAccessService(accountRepo);
   const accountListService = new AccountListService(accountRepo, accountAccess);
   const authRepository = new AuthRepository();
-  const accountCreateService = new AccountCreateService(accountRepo);
+  const accountCreateService = new AccountCreateService(accountRepo, authRepository);
   const auctionBrowseRepository = new AuctionBrowseRepository();
   const auctionBrowseService = new AuctionBrowseService(auctionBrowseRepository);
   const app = express();
@@ -79,6 +81,7 @@ export function createApp(
     "/analytics",
     createAnalyticsRouter(env, new AnalyticsController(new AnalyticsService(new AnalyticsRepository())))
   );
+  app.use("/users", createUsersRouter(env, new UserController(authRepository)));
 
   app.use(
     "/auctions",

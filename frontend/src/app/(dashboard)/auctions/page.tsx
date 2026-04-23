@@ -6,6 +6,7 @@ import { useAuth } from "@/context/auth-context";
 import { apiFetch, getApiErrorMessage } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import type { BankerAuctionRow } from "@/types/api";
+import { auctionStatusClass } from "@/lib/auction-status-class";
 import styles from "@/app/ui.module.css";
 
 export default function AuctionsPage() {
@@ -59,7 +60,7 @@ export default function AuctionsPage() {
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
-                <span className={styles.badge}>{a.status}</span>
+                <span className={auctionStatusClass(a.status)}>{a.status}</span>
                 <Link href={`/auctions/${a.id}/offer`} className={styles.btnSecondary} style={{ display: "inline-block", textAlign: "center", padding: "0.45rem 0.85rem", fontSize: "0.85rem" }}>
                   Offers
                 </Link>

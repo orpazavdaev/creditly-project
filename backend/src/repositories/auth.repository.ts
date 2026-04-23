@@ -10,6 +10,14 @@ export class AuthRepository {
     return prisma.user.findUnique({ where: { id } });
   }
 
+  findUsersByRole(role: UserRole): Promise<{ id: string; email: string }[]> {
+    return prisma.user.findMany({
+      where: { role },
+      orderBy: { email: "asc" },
+      select: { id: true, email: true },
+    });
+  }
+
   createUser(data: {
     email: string;
     passwordHash: string;

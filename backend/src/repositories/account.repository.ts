@@ -13,6 +13,7 @@ const staffListSelect = {
   syncStatus: true,
   failureReason: true,
   createdAt: true,
+  manager: { select: { email: true } },
 } as const;
 
 export type AccountAccessInfo = {
@@ -24,6 +25,7 @@ export type AccountAccessInfo = {
 export type AccountStaffListRow = {
   id: string;
   managerId: string;
+  manager: { email: string };
   costumerEmail: string;
   costumerPhone: string;
   costumerName: string;
@@ -90,19 +92,31 @@ export class AccountRepository {
     costumerName: string;
     costumerEmail: string;
     costumerPhone: string;
+    linkedUserId?: string;
   }): Promise<AccountStaffListRow> {
-    return prisma.account.create({
-      data: {
-        managerId: data.managerId,
-        costumerName: data.costumerName,
-        costumerEmail: data.costumerEmail,
-        costumerPhone: data.costumerPhone,
-        status: "NEW",
-        lastActivity: new Date(),
-        isHighActivity: false,
-        syncStatus: "SUCCESS",
-      },
-      select: staffListSelect,
+    return prisma.$transaction(async (tx) => {
+      const acc = await tx.account.create({
+        data: {
+          managerId: data.managerId,
+          costumerName: data.costumerName,
+          costumerEmail: data.costumerEmail,
+          costumerPhone: data.costumerPhone,
+          status: "NEW",
+          lastActivity: new Date(),
+          isHighActivity: false,
+          syncStatus: "SUCCESS",
+        },
+        select: { id: true },
+      });
+      if (data.linkedUserId) {
+        await tx.accountUser.create({
+          data: { accountId: acc.id, userId: data.linkedUserId },
+        });
+      }
+      return tx.account.findUniqueOrThrow({
+        where: { id: acc.id },
+        select: staffListSelect,
+      });
     });
   }
 

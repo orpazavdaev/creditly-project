@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useAuth } from "@/context/auth-context";
 import { apiFetch, getApiErrorMessage } from "@/lib/api";
+import { emailLocalPart } from "@/lib/email-display";
 import { queryKeys } from "@/lib/query-keys";
-import type { AccountListItem } from "@/types/api";
+import type { AccountListItem, AssignableUserRow } from "@/types/api";
 import styles from "@/app/ui.module.css";
 
 export default function NewAccountPage() {
@@ -17,17 +18,34 @@ export default function NewAccountPage() {
   const [costumerName, setCostumerName] = useState("");
   const [costumerEmail, setCostumerEmail] = useState("");
   const [costumerPhone, setCostumerPhone] = useState("");
+  const [linkedUserId, setLinkedUserId] = useState("");
+
+  const usersQ = useQuery({
+    queryKey: user ? queryKeys.assignableUsers(user.id) : ["users", "assignable", "pending"],
+    queryFn: () => apiFetch<{ users: AssignableUserRow[] }>("/users"),
+    enabled: Boolean(user),
+  });
 
   const create = useMutation({
-    mutationFn: () =>
-      apiFetch<{ account: AccountListItem }>("/accounts", {
+    mutationFn: () => {
+      const body: {
+        costumerName: string;
+        costumerEmail: string;
+        costumerPhone: string;
+        linkedUserId?: string;
+      } = {
+        costumerName: costumerName.trim(),
+        costumerEmail: costumerEmail.trim(),
+        costumerPhone: costumerPhone.trim(),
+      };
+      if (linkedUserId) {
+        body.linkedUserId = linkedUserId;
+      }
+      return apiFetch<{ account: AccountListItem }>("/accounts", {
         method: "POST",
-        json: {
-          costumerName: costumerName.trim(),
-          costumerEmail: costumerEmail.trim(),
-          costumerPhone: costumerPhone.trim(),
-        },
-      }),
+        json: body,
+      });
+    },
     onSuccess: (data) => {
       if (user) void qc.invalidateQueries({ queryKey: queryKeys.accounts(user.id) });
       router.replace(`/accounts/${data.account.id}`);
@@ -78,6 +96,23 @@ export default function NewAccountPage() {
             onChange={(e) => setCostumerPhone(e.target.value)}
             autoComplete="tel"
           />
+          <label className={styles.muted} htmlFor="uusr">
+            Assign to user (optional)
+          </label>
+          <select
+            id="uusr"
+            className={styles.input}
+            value={linkedUserId}
+            onChange={(e) => setLinkedUserId(e.target.value)}
+            disabled={usersQ.isLoading || usersQ.isError}
+          >
+            <option value="">— None —</option>
+            {(usersQ.data?.users ?? []).map((u) => (
+              <option key={u.id} value={u.id}>
+                {emailLocalPart(u.email)} · {u.email}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             className={styles.btn}

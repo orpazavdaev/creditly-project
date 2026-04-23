@@ -11,10 +11,6 @@ export class AnalyticsService {
       const raw = await this.repo.summarizeForScope(null);
       return { summary: toAnalyticsSummaryApi(raw) };
     }
-    if (user.role === "MANAGER") {
-      const raw = await this.repo.summarizeForScope(user.id);
-      return { summary: toAnalyticsSummaryApi(raw) };
-    }
     throw new HttpError(403, "Forbidden", "forbidden");
   }
 }

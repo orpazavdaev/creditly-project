@@ -18,6 +18,7 @@ describe("AccountListService getById", () => {
       findStaffDetailById: vi.fn().mockResolvedValue({
         id: "acc1",
         managerId: "m1",
+        manager: { email: "mgr@x.com" },
         costumerEmail: "c@x.com",
         costumerPhone: "1",
         costumerName: "Cust",

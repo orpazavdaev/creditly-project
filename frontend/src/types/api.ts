@@ -10,6 +10,7 @@ import type {
 export type AccountListItem = {
   id: string;
   managerId: string;
+  managerLabel: string;
   costumerEmail: string;
   costumerPhone: string;
   costumerName: string;
@@ -89,4 +90,24 @@ export type RegisterBody = {
   email: string;
   password: string;
   role: UserRole;
+};
+
+export type AnalyticsSummary = {
+  totalAccounts: number;
+  wonAccounts: number;
+  totalAuctions: number;
+  auctionsOpen: number;
+  auctionsClosed: number;
+  auctionsExpired: number;
+  totalOffers: number;
+  averageInterestRate: number | null;
+  bestInterestRate: number | null;
+  highActivityAccounts: number;
+  crmSyncSuccess: number;
+  crmSyncFailure: number;
+};
+
+export type AssignableUserRow = {
+  id: string;
+  email: string;
 };

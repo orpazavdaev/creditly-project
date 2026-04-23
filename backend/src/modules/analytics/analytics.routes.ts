@@ -7,7 +7,7 @@ import { requireRoles } from "../../middleware/require-role.js";
 export function createAnalyticsRouter(env: AppEnv, controller: AnalyticsController): Router {
   const r = Router();
   const auth = authenticateJWT(env);
-  const staffAnalytics = requireRoles(["ADMIN", "MANAGER"]);
-  r.get("/summary", auth, staffAnalytics, controller.summary);
+  const adminAnalytics = requireRoles(["ADMIN"]);
+  r.get("/summary", auth, adminAnalytics, controller.summary);
   return r;
 }

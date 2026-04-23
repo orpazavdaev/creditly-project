@@ -30,6 +30,7 @@ export const CreateAccountBodySchema = z
     costumerName: z.string().min(1, "Customer name is required"),
     costumerEmail: z.string().min(1).email("Invalid email"),
     costumerPhone: z.string().min(1, "Phone is required"),
+    linkedUserId: z.string().min(1).optional(),
   })
   .strict();
 

@@ -1,8 +1,10 @@
 import type { AccountStaffDetailRow, AccountStaffListRow } from "../repositories/account.repository.js";
+import { emailLocalPart } from "../utils/email-display.js";
 
 export type AccountStaffListItem = {
   id: string;
   managerId: string;
+  managerLabel: string;
   costumerEmail: string;
   costumerPhone: string;
   costumerName: string;
@@ -31,6 +33,7 @@ export function toAccountStaffListItem(row: AccountStaffListRow): AccountStaffLi
   return {
     id: row.id,
     managerId: row.managerId,
+    managerLabel: emailLocalPart(row.manager.email),
     costumerEmail: row.costumerEmail,
     costumerPhone: row.costumerPhone,
     costumerName: row.costumerName,

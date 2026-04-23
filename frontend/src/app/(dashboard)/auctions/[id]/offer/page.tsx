@@ -7,6 +7,7 @@ import { useState } from "react";
 import { apiFetch, getApiErrorMessage } from "@/lib/api";
 import { useAuth } from "@/context/auth-context";
 import { queryKeys } from "@/lib/query-keys";
+import { auctionStatusClass } from "@/lib/auction-status-class";
 import type { AuctionOffersResponse } from "@/types/api";
 import styles from "@/app/ui.module.css";
 
@@ -90,7 +91,9 @@ export default function AuctionOfferPage() {
           <dt className={styles.dt}>Classification</dt>
           <dd className={styles.dd}>{auction.classification.replace(/_/g, " ")}</dd>
           <dt className={styles.dt}>Status</dt>
-          <dd className={styles.dd}>{auction.status}</dd>
+          <dd className={styles.dd}>
+            <span className={auctionStatusClass(auction.status)}>{auction.status}</span>
+          </dd>
           <dt className={styles.dt}>Expires</dt>
           <dd className={styles.dd}>{new Date(auction.expiresAt).toLocaleString()}</dd>
           {isAdmin && auction.openedAt && (

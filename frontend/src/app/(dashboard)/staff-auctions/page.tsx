@@ -6,6 +6,7 @@ import { useAuth } from "@/context/auth-context";
 import { apiFetch, getApiErrorMessage } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import type { AdminAllAuctionRow } from "@/types/api";
+import { auctionStatusClass } from "@/lib/auction-status-class";
 import styles from "@/app/ui.module.css";
 
 export default function StaffAuctionsPage() {
@@ -60,7 +61,7 @@ export default function StaffAuctionsPage() {
                 )}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "0.65rem", flexWrap: "wrap" }}>
-                <span className={styles.badge}>{a.status}</span>
+                <span className={auctionStatusClass(a.status)}>{a.status}</span>
                 <span className={styles.muted} style={{ fontSize: "0.8rem" }}>
                   Expires {new Date(a.expiresAt).toLocaleString()}
                 </span>

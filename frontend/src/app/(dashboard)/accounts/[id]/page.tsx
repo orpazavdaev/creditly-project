@@ -14,6 +14,7 @@ import {
   canViewAccountEvents,
 } from "@/types/roles";
 import { useAuth } from "@/context/auth-context";
+import { auctionStatusClass } from "@/lib/auction-status-class";
 import styles from "@/app/ui.module.css";
 
 export default function AccountDetailPage() {
@@ -100,7 +101,10 @@ export default function AccountDetailPage() {
 
   return (
     <>
-      <h1 className={styles.pageTitle}>{account.costumerName}</h1>
+      <h1 className={styles.pageTitle} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem" }}>
+        {account.costumerName}
+        {account.isHighActivity && <span className={styles.badgeHighActivity}>High activity</span>}
+      </h1>
       <p className={styles.pageSubtitle}>
         <Link href="/accounts" className={styles.link}>
           ← Accounts
@@ -112,6 +116,8 @@ export default function AccountDetailPage() {
           <dd className={styles.dd}>{account.costumerEmail}</dd>
           <dt className={styles.dt}>Phone</dt>
           <dd className={styles.dd}>{account.costumerPhone}</dd>
+          <dt className={styles.dt}>Account manager</dt>
+          <dd className={styles.dd}>{account.managerLabel}</dd>
           <dt className={styles.dt}>Status</dt>
           <dd className={styles.dd}>{account.status}</dd>
           <dt className={styles.dt}>Last activity</dt>
@@ -122,7 +128,9 @@ export default function AccountDetailPage() {
             <>
               <dt className={styles.dt}>Auction</dt>
               <dd className={styles.dd}>
-                <div>Status: {auc.status}</div>
+                <div>
+                  Status: <span className={auctionStatusClass(auc.status)}>{auc.status}</span>
+                </div>
                 <div>Classification: {auc.classification.replace(/_/g, " ")}</div>
                 <div>Opened: {new Date(auc.openedAt).toLocaleString()}</div>
                 <div>Expires: {new Date(auc.expiresAt).toLocaleString()}</div>

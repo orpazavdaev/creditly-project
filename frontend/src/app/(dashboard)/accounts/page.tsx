@@ -63,10 +63,16 @@ export default function AccountsPage() {
                 <div style={{ fontWeight: 600 }}>{a.costumerName}</div>
                 <div className={styles.muted} style={{ fontSize: "0.85rem" }}>
                   {a.costumerEmail}
+                  {a.managerLabel ? (
+                    <>
+                      {" · "}
+                      Manager: {a.managerLabel}
+                    </>
+                  ) : null}
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                {a.isHighActivity && <span className={styles.badge}>High activity</span>}
+                {a.isHighActivity && <span className={styles.badgeHighActivity}>High activity</span>}
                 <span className={styles.badge}>{a.status}</span>
               </div>
             </Link>
