@@ -10,6 +10,7 @@ import { AuctionOfferController } from "./controllers/auction-offer.controller.j
 import { AuthController } from "./controllers/auth.controller.js";
 import { BankOfferController } from "./controllers/bank-offer.controller.js";
 import { EventController } from "./controllers/event.controller.js";
+import { AnalyticsController } from "./controllers/analytics.controller.js";
 import { HealthController } from "./controllers/health.controller.js";
 import { AuthRepository } from "./repositories/auth.repository.js";
 import { EventRepository } from "./repositories/event.repository.js";
@@ -18,6 +19,7 @@ import { AccountAuctionRepository } from "./repositories/account-auction.reposit
 import { AccountRepository } from "./repositories/account.repository.js";
 import { AuctionBrowseRepository } from "./repositories/auction-browse.repository.js";
 import { AuctionLifecycleRepository } from "./repositories/auction-lifecycle.repository.js";
+import { AnalyticsRepository } from "./repositories/analytics.repository.js";
 import { AuctionOfferRepository } from "./repositories/auction-offer.repository.js";
 import { AccountAccessService } from "./services/account-access.service.js";
 import { AccountAuctionService } from "./services/account-auction.service.js";
@@ -25,10 +27,12 @@ import { AccountListService } from "./services/account-list.service.js";
 import { AuctionBrowseService } from "./services/auction-browse.service.js";
 import { AuctionCloseService } from "./services/auction-close.service.js";
 import { AuctionOfferService } from "./services/auction-offer.service.js";
+import { AnalyticsService } from "./services/analytics.service.js";
 import { AuthService } from "./services/auth.service.js";
 import { EventService } from "./services/event.service.js";
 import { HealthService } from "./services/health.service.js";
 import { createAccountRouter } from "./modules/account/account.routes.js";
+import { createAnalyticsRouter } from "./modules/analytics/analytics.routes.js";
 import { createAuctionRouter } from "./modules/auction/auction.routes.js";
 import { createAuthRouter } from "./modules/auth/auth.routes.js";
 import { createBankOfferRouter } from "./modules/bank-offer/bank-offer.routes.js";
@@ -65,6 +69,10 @@ export function createApp(env: AppEnv, eventBus: EventBus = appEventBus): expres
 
   app.use("/health", createHealthRouter(healthController));
   app.use("/auth", createAuthRouter(authController));
+  app.use(
+    "/analytics",
+    createAnalyticsRouter(env, new AnalyticsController(new AnalyticsService(new AnalyticsRepository())))
+  );
 
   app.use(
     "/auctions",
