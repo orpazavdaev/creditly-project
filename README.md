@@ -32,6 +32,83 @@ The backend follows a **layered** structure so HTTP, use cases, and persistence 
 
 The frontend uses the **App Router**, **React Query** for server state, a shared **`apiFetch`** helper, and **`AuthProvider`** for access tokens plus refresh via cookies.
 
+### Backend class reference, roles, and relationships
+
+Classes are used for **constructor injection**: each type holds its collaborators as **`private readonly`** fields. There is **no shared base class** for controllers, services, or repositories. **Inheritance** appears only on **`HttpError extends Error`** and **`CrmMockOutbound implements CrmOutboundClient`** (interface substitution for **`CrmService`**).
+
+**Where instances are wired**
+
+- **`createApp`** (`backend/src/app.ts`) — Builds repositories and services, attaches **one shared `EventBus`** (default **`appEventBus`**) to anything that publishes domain events, nests **controllers → services → repositories** for each HTTP mount, and accepts an optional **`DomainEventBusinessService`** for tests.
+- **`registerEventBusListeners`** (`backend/src/event-bus/register-listeners.ts`) — Creates **`AccountSyncRepository`**, **`CrmMockOutbound`**, **`CrmService`**, and registers bus listeners (CRM runs **outside** `createApp` but uses the same bus singleton).
+- **`startRefreshTokenCleanupJob`** — Instantiates **`AuthRepository`** for expired refresh-token deletes.
+
+**Typical request flow**
+
+`modules/*` routes apply middleware, then call a **controller** method. The controller parses path/query, calls **one service** (or a small set), maps the result to JSON. The service enforces rules and RBAC helpers, calls **repositories** and sometimes **`EventBus`** / **`DomainEventBusinessService`**. Repositories are the only layer that use **Prisma** directly.
+
+**Controllers** (HTTP adapter only; no Prisma)
+
+| Class | Responsibility |
+| -------- | ---------------- |
+| **`HealthController`** | Exposes liveness; delegates to **`HealthService`**. |
+| **`AuthController`** | Login, refresh, register; delegates to **`AuthService`**. |
+| **`AnalyticsController`** | Admin analytics endpoint; delegates to **`AnalyticsService`**. |
+| **`UserController`** | Admin/manager user listing tied to **`AuthRepository`**. |
+| **`AccountController`** | Account CRUD, list, detail, open auction on account; orchestrates **`AccountAuctionService`**, **`AccountListService`**, **`AccountCreateService`**. |
+| **`AuctionController`** | Auction list (staff/banker) and close auction; uses **`AuctionCloseService`** and **`AuctionBrowseService`**. |
+| **`AuctionOfferController`** | List offers and submit offer; delegates to **`AuctionOfferService`**. |
+| **`EventController`** | List and create timeline events; delegates to **`EventService`**. |
+
+**Services** (use cases, validation, RBAC, orchestration)
+
+| Class | Responsibility |
+| -------- | ---------------- |
+| **`HealthService`** | Simple health check over **`HealthRepository`**. |
+| **`AuthService`** | Register, login, refresh token rotation; uses **`AuthRepository`** and env-driven JWT/cookie settings. |
+| **`AnalyticsService`** | Aggregates admin-only metrics via **`AnalyticsRepository`**. |
+| **`AccountAccessService`** | **`assertStaffCanAccessAccount`** and manager/admin variants; uses **`AccountRepository`** for lookups and assignment checks. |
+| **`AccountListService`** | Scoped **`GET /accounts`** and **`GET /accounts/:id`**; combines **`AccountRepository`**, **`AccountAccessService`**, **`AuctionLifecycleRepository`** for summaries. |
+| **`AccountCreateService`** | Creates accounts (and optional linked user); **`AccountRepository`** + **`AuthRepository`**. |
+| **`AccountAuctionService`** | Opens an auction for an account (events, lifecycle, **`DomainEventBusinessService`**, **`EventBus`**). |
+| **`AuctionBrowseService`** | Resolves auction list rows for staff vs banker (with **`AuctionBrowseRepository`** and lifecycle expiry helpers). |
+| **`AuctionCloseService`** | Manager/admin close path: lifecycle writes, **`AUCTION_CLOSED`** event, **`DomainEventBusinessService`**, then **`publishEventCreated`**. |
+| **`AuctionOfferService`** | Banker submit offer: validation, **`AuctionOfferRepository`**, lifecycle expiry, **`DomainEventBusinessService`**, **`EventBus`**. |
+| **`EventService`** | Staff event create/list: **`EventRepository`**, **`AccountAccessService`**, **`DomainEventBusinessService`**, **`EventBus`**. |
+| **`DomainEventBusinessService`** | Central **synchronous** reactions after a persisted **`Event`**: account status, high activity, auction win/expire side effects; uses **`DomainEventBusinessRepository`** and may **`emit`** winning-offer topic on the bus. |
+| **`CrmService`** | **Asynchronous** CRM orchestration from bus listeners only: calls injected **`CrmOutboundClient`**, then **`AccountSyncRepository`** for sync state. |
+
+**Repositories** (persistence only)
+
+| Class | Responsibility |
+| -------- | ---------------- |
+| **`HealthRepository`** | DB ping for health. |
+| **`AuthRepository`** | Users, refresh tokens (hash at rest), auth queries for **`AuthService`**. |
+| **`AnalyticsRepository`** | Read models for analytics. |
+| **`AccountRepository`** | Accounts, assignments, manager links for list/detail/access. |
+| **`AccountAuctionRepository`** | Open auction transaction boundary for an account. |
+| **`AccountSyncRepository`** | Updates **`Account.syncStatus`** / **`failureReason`** after CRM attempts. |
+| **`AuctionLifecycleRepository`** | Auction rows, expiry, close, domain **`Event`** inserts for auction lifecycle. |
+| **`AuctionBrowseRepository`** | Queries behind banker/staff auction lists. |
+| **`AuctionOfferRepository`** | Offer persistence and banker-scoped reads for submit/list. |
+| **`EventRepository`** | Append and read **`Event`** rows. |
+| **`DomainEventBusinessRepository`** | Multi-step Prisma updates for business rules triggered by event types (account state, offers, auctions). |
+
+**Infrastructure and errors**
+
+| Class | Responsibility |
+| -------- | ---------------- |
+| **`EventBus`** | In-process **`on` / `emit`**; shared across **`createApp`**, **`DomainEventBusinessService`**, and **`registerEventBusListeners`**. |
+| **`CrmMockOutbound`** | Implements **`CrmOutboundClient`**: simulated async CRM push with configurable failure rate. |
+| **`HttpError`** | **`extends Error`**: typed **`status`** and **`code`** for the global error middleware. |
+
+**Relationship sketch (composition, not inheritance)**
+
+- **Controllers** depend only on **services** (and sometimes env for routers). They do **not** depend on repositories or **`EventBus`** directly, except indirectly through services.
+- **`AccountAccessService`** is reused anywhere an account id must be checked for **ADMIN / MANAGER / USER** (and to reject **BANKER** on staff account APIs).
+- **`DomainEventBusinessService`** is shared by **`EventService`**, **`AccountAuctionService`**, **`AuctionCloseService`**, and **`AuctionOfferService`** so event-driven business rules stay in one place.
+- **`AuctionLifecycleRepository`** is shared by list, browse, close, and offer flows so auction state and expiry stay consistent.
+- **`CrmService`** is **not** constructed in **`createApp`**; it listens on the same **`EventBus`** instance after **`DomainEventBusinessService`** and HTTP paths have persisted work.
+
 ---
 
 ## Database design
@@ -183,11 +260,50 @@ For **`winning.offer.selected`**, the same **`syncAccount`** path runs with **`c
 | **Access token** | `Authorization: Bearer` | Short (default **900s** via `ACCESS_TOKEN_EXPIRES_SECONDS`) | Not stored; JWT signed with `JWT_SECRET` |
 | **Refresh token** | **HttpOnly** cookie (name from `REFRESH_TOKEN_COOKIE`, default `refreshToken`, path **`/auth`**) | Long (default **7 days** via `REFRESH_TOKEN_EXPIRES_DAYS`) | **SHA-256 hash** only in **`RefreshToken`** |
 
-**Login** returns `{ accessToken, expiresIn }` and sets the refresh cookie. **Refresh** reads the cookie, verifies the hash, **deletes the old row**, issues a **new** refresh (rotation), and returns a new access token. **Register** does not start a session (no tokens), so “identity exists” and “session started” stay distinct.
+**Login** returns `{ accessToken, expiresIn }` and sets the refresh cookie. **Refresh** (`AuthService.refresh`) reads the cookie, resolves the matching **`RefreshToken`** row, **rotates** the refresh material, and returns a new access token. **Register** does not start a session (no tokens), so “identity exists” and “session started” stay distinct.
 
 **Client guidance:** keep access tokens in **memory** where possible; avoid `localStorage` for refresh material because the cookie is already HttpOnly. **CORS** uses **`credentials: true`** and a configured **`CORS_ORIGIN`** so browsers send cookies only to the intended API origin.
 
-Expired refresh rows are removed on a periodic **cleanup job** so the table does not grow without bound.
+### Refresh token rotation (what it means here)
+
+**Rotation** means the refresh token presented by the client is **consumed**: it must not work again, and the server issues **new** refresh material (new random value, new hash stored, new cookie). That supports **one-time use** of each refresh token and limits replay if a token is stolen after rotation.
+
+**Persistence in this codebase:** **`AuthService.refresh`** deletes the **`RefreshToken`** row for the hash that matched the cookie, then **`AuthRepository.createRefreshToken`** inserts a **new** row with the new hash. The implementation is **delete + insert**, not an in-place **UPDATE** of `tokenHash` on the same row. Either shape can be valid in other systems; what matters for “rotation” is invalidating the old secret and issuing a new one.
+
+### Expiry semantics (sliding window)
+
+On **login** and on every successful **refresh**, `expiresAt` is set to **approximately “now + `REFRESH_TOKEN_EXPIRES_DAYS`”** (`AuthService.refreshExpiryDate`). The new row’s **`expiresAt` is not copied** from the previous row.
+
+That is a **sliding** refresh lifetime: each successful refresh starts a **new** validity horizon from that moment. If the client refreshes often (for example whenever the short-lived access token expires every **15 minutes**), the refresh token’s deadline **keeps moving forward** while the user stays active, so an **active** user does not naturally hit refresh-token expiry.
+
+Users stop being able to refresh when **no successful refresh** occurs for longer than that horizon (cookie and DB row both reflect the same policy), when the **cookie is gone** (cleared browser data, other device, and so on), or when the **stored row is missing**. This stack does **not** add a separate **idle timeout** or an **absolute “max session age from first login”** on top of the sliding refresh row; those would be extra product or security rules if you need them.
+
+### Why refresh lookup and the cleanup job both exist
+
+**Lookup** (`AuthRepository.findRefreshTokenByHash`) requires **`expiresAt` strictly in the future** as well as a matching hash. Expired rows therefore **cannot** be used to mint new access tokens, even if a row still exists.
+
+The periodic **`startRefreshTokenCleanupJob`** deletes rows whose **`expiresAt` is already in the past**. That job is **housekeeping** (limit table growth from abandoned sessions, multiple logins, and similar), **not** the mechanism that enforces expiry at request time.
+
+### Tradeoffs and how this fits common practice
+
+**Aligned with widely used patterns**
+
+- **Short-lived access tokens** plus a **separate refresh path** limits damage if an access token leaks (small exposure window).
+- **Refresh token rotation** (invalidate old, issue new) is a common recommendation and a good base for stricter policies later (for example **reuse detection** and revoking a **family** of tokens if an old refresh is presented again).
+
+**Sliding refresh expiry**
+
+- **Pros:** straightforward “stay signed in while you use the app” behavior; fewer surprise logouts during active use.
+- **Cons:** an **active** session can continue **indefinitely** from the refresh mechanism alone; risk is bounded by how long a **stolen refresh cookie** remains usable if the attacker refreshes before the victim notices.
+
+**Stronger or more regulated systems often add** (not implemented here unless you extend the code)
+
+- **Absolute maximum session lifetime** (force sign-in again after N days from login even if refresh keeps succeeding).
+- **Idle timeout** (require re-auth after no API activity for M minutes or hours), which is **orthogonal** to refresh TTL.
+- **Refresh reuse / theft handling** (detect presentation of an already-rotated refresh token and revoke related sessions).
+- **Binding** (cryptographically tie refresh usage to a client or device) when the threat model warrants the complexity.
+
+There is no single universal “best practice”; the right balance depends on **risk**, **compliance**, and **UX**. This prototype leans toward **convenience** and **standard JWT + HttpOnly refresh** mechanics; tighten the model when the product requires stricter session bounds.
 
 ---
 
@@ -228,6 +344,7 @@ This repository ships **`prisma/schema.prisma`** and uses **`prisma db push`** (
 
 ## Assumptions and trade-offs
 
+- **Auth sessions** — Refresh tokens use **rotation** and a **sliding** `expiresAt` (see **Token strategy**). There is **no idle timeout** or **absolute max session age**; an active client that refreshes before the refresh window ends can stay signed in indefinitely until cookies or DB state change.
 - **In-process event bus** — Simple and fast, but not durable: a crash after `emit` starts async work can drop side effects. Replacing with a queue or outbox would be the next step for hard reliability.
 - **JWT claims** — `role` is fixed until refresh; revoking access for a compromised token before expiry may require a denylist or very short access TTL (not implemented here).
 - **Blind auctions** — Privacy is enforced by **API design and RBAC**, not by removing relational integrity in the database.
