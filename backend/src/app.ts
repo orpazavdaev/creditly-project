@@ -20,6 +20,7 @@ import { AuctionBrowseRepository } from "./repositories/auction-browse.repositor
 import { AuctionLifecycleRepository } from "./repositories/auction-lifecycle.repository.js";
 import { AnalyticsRepository } from "./repositories/analytics.repository.js";
 import { AuctionOfferRepository } from "./repositories/auction-offer.repository.js";
+import { DomainEventBusinessRepository } from "./repositories/domain-event-business.repository.js";
 import { AccountAccessService } from "./services/account-access.service.js";
 import { AccountAuctionService } from "./services/account-auction.service.js";
 import { AccountCreateService } from "./services/account-create.service.js";
@@ -31,6 +32,7 @@ import { AnalyticsService } from "./services/analytics.service.js";
 import { AuthService } from "./services/auth.service.js";
 import { EventService } from "./services/event.service.js";
 import { HealthService } from "./services/health.service.js";
+import { DomainEventBusinessService } from "./services/domain-event-business.service.js";
 import { createAccountRouter } from "./modules/account/account.routes.js";
 import { createAnalyticsRouter } from "./modules/analytics/analytics.routes.js";
 import { createAuctionRouter } from "./modules/auction/auction.routes.js";
@@ -41,7 +43,11 @@ import { errorHandler } from "./middleware/error-handler.js";
 import { notFound } from "./middleware/not-found.js";
 import { requestContext } from "./middleware/request-context.js";
 
-export function createApp(env: AppEnv, eventBus: EventBus = appEventBus): express.Express {
+export function createApp(
+  env: AppEnv,
+  eventBus: EventBus = appEventBus,
+  domainEventBusiness = new DomainEventBusinessService(new DomainEventBusinessRepository(), eventBus)
+): express.Express {
   const auctionLifecycleRepo = new AuctionLifecycleRepository();
   const accountRepo = new AccountRepository();
   const accountAccess = new AccountAccessService(accountRepo);
@@ -79,11 +85,11 @@ export function createApp(env: AppEnv, eventBus: EventBus = appEventBus): expres
     createAuctionRouter(
       env,
       new AuctionController(
-        new AuctionCloseService(auctionLifecycleRepo, eventBus, accountAccess),
+        new AuctionCloseService(auctionLifecycleRepo, eventBus, accountAccess, domainEventBusiness),
         auctionBrowseService
       ),
       new AuctionOfferController(
-        new AuctionOfferService(new AuctionOfferRepository(), auctionLifecycleRepo, eventBus)
+        new AuctionOfferService(new AuctionOfferRepository(), auctionLifecycleRepo, eventBus, domainEventBusiness)
       )
     )
   );
@@ -91,8 +97,13 @@ export function createApp(env: AppEnv, eventBus: EventBus = appEventBus): expres
     "/accounts",
     createAccountRouter(
       env,
-      new AccountController(
-        new AccountAuctionService(new AccountAuctionRepository(), eventBus, accountAccess),
+        new AccountController(
+        new AccountAuctionService(
+          new AccountAuctionRepository(),
+          eventBus,
+          accountAccess,
+          domainEventBusiness
+        ),
         accountListService,
         accountCreateService
       )
@@ -102,7 +113,7 @@ export function createApp(env: AppEnv, eventBus: EventBus = appEventBus): expres
     "/events",
     createEventRouter(
       env,
-      new EventController(new EventService(new EventRepository(), eventBus, accountAccess))
+      new EventController(new EventService(new EventRepository(), eventBus, accountAccess, domainEventBusiness))
     )
   );
 

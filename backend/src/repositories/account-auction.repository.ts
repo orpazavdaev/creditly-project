@@ -27,6 +27,10 @@ export class AccountAuctionRepository {
           expiresAt: data.expiresAt,
         },
       });
+      await tx.account.update({
+        where: { id: data.accountId },
+        data: { status: "AUCTION_OPEN", lastActivity: data.openedAt },
+      });
       const eventRow = await tx.event.create({
         data: {
           accountId: data.accountId,

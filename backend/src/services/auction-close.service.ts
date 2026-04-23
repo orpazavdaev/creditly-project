@@ -1,15 +1,17 @@
 import type { EventBus } from "../event-bus/event-bus.js";
-import { publishEventCreated } from "../event-bus/publish-domain-event.js";
+import { publishEventCreated, toDomainEventCreatedPayload } from "../event-bus/publish-domain-event.js";
 import { HttpError } from "../utils/http-error.js";
 import { AuctionLifecycleRepository } from "../repositories/auction-lifecycle.repository.js";
 import type { AuthUser } from "../types/auth-user.js";
 import { AccountAccessService } from "./account-access.service.js";
+import { DomainEventBusinessService } from "./domain-event-business.service.js";
 
 export class AuctionCloseService {
   constructor(
     private readonly lifecycleRepo: AuctionLifecycleRepository,
     private readonly bus: EventBus,
-    private readonly accountAccess: AccountAccessService
+    private readonly accountAccess: AccountAccessService,
+    private readonly domainEventBusiness: DomainEventBusinessService
   ) {}
 
   async closeByManager(user: AuthUser, auctionId: string): Promise<{ closed: true }> {
@@ -37,6 +39,7 @@ export class AuctionCloseService {
       userId: user.id,
       auctionId: row.id,
     });
+    await this.domainEventBusiness.applyOnEventCreated(toDomainEventCreatedPayload(eventRow));
     publishEventCreated(this.bus, eventRow);
     return { closed: true };
   }

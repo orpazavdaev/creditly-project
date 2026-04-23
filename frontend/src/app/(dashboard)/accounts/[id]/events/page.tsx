@@ -44,11 +44,14 @@ export default function AccountEventsPage() {
           metadata: { note: note.trim() },
         },
       }),
-    onSuccess: () => {
+    onSuccess: async () => {
       if (!user) return;
       setNote("");
-      void qc.invalidateQueries({ queryKey: queryKeys.events(user.id, id) });
-      void qc.invalidateQueries({ queryKey: queryKeys.account(user.id, id) });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: queryKeys.events(user.id, id) }),
+        qc.invalidateQueries({ queryKey: queryKeys.account(user.id, id) }),
+        qc.invalidateQueries({ queryKey: queryKeys.accounts(user.id) }),
+      ]);
     },
   });
 
@@ -62,10 +65,13 @@ export default function AccountEventsPage() {
           metadata: { source: "ui" },
         },
       }),
-    onSuccess: () => {
+    onSuccess: async () => {
       if (!user) return;
-      void qc.invalidateQueries({ queryKey: queryKeys.events(user.id, id) });
-      void qc.invalidateQueries({ queryKey: queryKeys.account(user.id, id) });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: queryKeys.events(user.id, id) }),
+        qc.invalidateQueries({ queryKey: queryKeys.account(user.id, id) }),
+        qc.invalidateQueries({ queryKey: queryKeys.accounts(user.id) }),
+      ]);
     },
   });
 

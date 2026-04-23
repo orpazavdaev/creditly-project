@@ -1,6 +1,6 @@
 import type { Event, Prisma } from "@prisma/client";
 import type { EventBus } from "../event-bus/event-bus.js";
-import { publishEventCreated } from "../event-bus/publish-domain-event.js";
+import { publishEventCreated, toDomainEventCreatedPayload } from "../event-bus/publish-domain-event.js";
 import { HttpError } from "../utils/http-error.js";
 import { eventTypeToApi, parseEventTypeFromApi } from "../utils/event-type-api.js";
 import { EventRepository } from "../repositories/event.repository.js";
@@ -9,6 +9,7 @@ import { AccountAccessService } from "./account-access.service.js";
 import { emailLocalPart } from "../utils/email-display.js";
 import { parseBody } from "../validation/parse-body.js";
 import { EventCreateBodySchema } from "../validation/schemas.js";
+import { DomainEventBusinessService } from "./domain-event-business.service.js";
 
 export type EventApiRow = {
   id: string;
@@ -24,7 +25,8 @@ export class EventService {
   constructor(
     private readonly repo: EventRepository,
     private readonly bus: EventBus,
-    private readonly accountAccess: AccountAccessService
+    private readonly accountAccess: AccountAccessService,
+    private readonly domainEventBusiness: DomainEventBusinessService
   ) {}
 
   async create(user: AuthUser, body: unknown): Promise<{ event: EventApiRow }> {
@@ -51,6 +53,7 @@ export class EventService {
       type: prismaType,
       metadata: meta,
     });
+    await this.domainEventBusiness.applyOnEventCreated(toDomainEventCreatedPayload(row));
     publishEventCreated(this.bus, row);
     return { event: this.toApi(row, user.email) };
   }
