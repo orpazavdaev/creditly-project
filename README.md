@@ -162,14 +162,24 @@ That keeps the contract stable when you later add real uploads or notes: you wou
 
 After an **`Event`** row is persisted, **`EventService`** publishes **`event.created`** on the shared **`appEventBus`** (`event-bus/app-event-bus.ts`) with a **`DomainEventCreatedPayload`** (`event-bus/domain-events.ts`: ids, Prisma type, API type string, timestamps, metadata).
 
-**Why event-driven here:** HTTP stays thin (validate → write → respond) while **follow-up work** runs through subscribers without blocking the request with every downstream system. Today that is only **stdout stubs**; tomorrow the same hook can call internal services (notifications, projections) or outbound CRM without growing `EventService` into a god object.
+**Why event-driven here:** HTTP stays thin (validate → write → respond) while **follow-up work** runs through subscribers without growing **`EventService`** with every downstream rule. The HTTP handler returns after the row exists; reactions can evolve independently (CRM stub today, real HTTP later).
 
 **Where it is wired:** **`registerEventBusListeners`** runs once at process startup in **`index.ts`** (before `createApp`) and attaches:
 
-- **`event-bus/listeners/business-logic.listener.ts`** — placeholder for in-app reactions (rules, aggregates, internal workflows).
-- **`event-bus/listeners/crm-integration.listener.ts`** — placeholder for external CRM sync or webhooks (would live next to `integration/` helpers when real I/O exists).
+- **`event-bus/listeners/business-logic.listener.ts`** — entry point only: it **`void`**-starts **`applyBusinessRulesOnEventCreated`** from **`services/domain-event-business.service.ts`** and logs async failures to **stderr**. That pattern keeps **`emit`** synchronous (no change to **`EventBus`**) while Prisma work runs **after** the request transaction conceptually, without blocking the response.
+- **`event-bus/listeners/crm-integration.listener.ts`** — still a **stdout stub** for future outbound CRM.
 
-**Why no queue yet:** everything runs **in-process** on the same Node thread. **`EventBus.emit`** wraps each handler in **`try/catch`** so one failing listener does not prevent the other from running or break the HTTP response path after the DB commit.
+**Business rules (in `domain-event-business.service.ts`):** all run **after** the new `Event` row is visible, so counts and reads include the event that triggered them.
+
+1. **`document_uploaded`** — Updates the **`Account`**: **`status` → `READY_FOR_AUCTION`**, **`lastActivity` → now** (only for this event type, as specified).
+2. **High activity** — Counts **`Event`** rows for that **`accountId`** with **`createdAt` ≥ now − 24h**; if **count > 3**, sets **`Account.isHighActivity`** to **`true`**, otherwise **`false`**. Runs on **every** domain event so the flag tracks the rolling window.
+3. **`auction_closed`** — Loads **`AuctionOpportunity`** by **`accountId`** (1:1). If none, returns. Loads **`bankOffers`** ordered by **`totalInterestRate` ascending**, then **`createdAt` ascending**, so **equal rate → earliest submitted offer wins**. **No offers:** **`AuctionOpportunity.status` → `EXPIRED`**, **`closedAt` set**, **`winningOfferId` cleared** (no **`Account`** status change). **At least one offer:** **`status` → `CLOSED`**, **`winningOfferId`** set to the chosen offer, and **`Account.status` → `WON`** in the same transaction as the auction update.
+
+**Why a service file instead of only the listener:** listeners stay tiny and testable; **`services/domain-event-business.service.ts`** holds Prisma and rule text in one place so you can unit-test rules or swap the listener transport later without duplicating logic.
+
+**Why no queue yet:** everything runs **in-process** on the same Node thread. **`EventBus.emit`** wraps each **sync** handler in **`try/catch`**; async business work uses **`.catch`** on the returned promise so failures do not reject inside **`emit`**.
+
+**Consistency note:** the client already received **`201`** before reactions finish. If a reaction fails, the audit row exists but downstream state may be stale—acceptable for this tier; production would add retries, outbox, or idempotent workers.
 
 ## Environment
 

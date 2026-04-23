@@ -1,7 +1,9 @@
 import type { DomainEventCreatedPayload } from "../domain-events.js";
+import { applyBusinessRulesOnEventCreated } from "../../services/domain-event-business.service.js";
 
 export function onDomainEventCreatedBusiness(payload: DomainEventCreatedPayload): void {
-  process.stdout.write(
-    `[business] account=${payload.accountId} type=${payload.typeApi} eventId=${payload.id}\n`
-  );
+  void applyBusinessRulesOnEventCreated(payload).catch((err) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[business] async error: ${msg}\n`);
+  });
 }
