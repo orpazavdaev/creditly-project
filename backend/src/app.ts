@@ -2,13 +2,19 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import type { AppEnv } from "./types/env.js";
+import { AccountController } from "./controllers/account.controller.js";
+import { AuctionController } from "./controllers/auction.controller.js";
 import { AuthController } from "./controllers/auth.controller.js";
+import { BankOfferController } from "./controllers/bank-offer.controller.js";
 import { HealthController } from "./controllers/health.controller.js";
 import { AuthRepository } from "./repositories/auth.repository.js";
 import { HealthRepository } from "./repositories/health.repository.js";
 import { AuthService } from "./services/auth.service.js";
 import { HealthService } from "./services/health.service.js";
+import { createAccountRouter } from "./modules/account/account.routes.js";
+import { createAuctionRouter } from "./modules/auction/auction.routes.js";
 import { createAuthRouter } from "./modules/auth/auth.routes.js";
+import { createBankOfferRouter } from "./modules/bank-offer/bank-offer.routes.js";
 import { createHealthRouter } from "./modules/health/health.routes.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { notFound } from "./middleware/not-found.js";
@@ -36,6 +42,10 @@ export function createApp(env: AppEnv): express.Express {
 
   app.use("/health", createHealthRouter(healthController));
   app.use("/auth", createAuthRouter(authController));
+
+  app.use("/auctions", createAuctionRouter(env, new AuctionController()));
+  app.use("/bank-offers", createBankOfferRouter(env, new BankOfferController()));
+  app.use("/accounts", createAccountRouter(env, new AccountController()));
 
   app.use(notFound);
   app.use(errorHandler);

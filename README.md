@@ -84,6 +84,14 @@ For **production** (and usually shared staging), prefer **versioned migrations**
 - `POST /auth/login` — body: `email`, `password`. Validates credentials, returns JSON `{ accessToken, expiresIn }` (seconds). Sets an **HttpOnly** cookie (name from `REFRESH_TOKEN_COOKIE`, default `refreshToken`) containing the **raw** refresh token; `path` is `/auth` so it is sent to `/auth/*` only.
 - `POST /auth/refresh` — no body; reads the refresh cookie, looks up **SHA-256** hash in `RefreshToken`, rejects if missing or expired. **Rotates** the refresh: deletes the old row, stores a new hash, sets a new cookie, returns `{ accessToken, expiresIn }`.
 
+### Request flow (why it is shaped this way)
+
+1. **Register** creates identity only. Tokens are not returned so registration cannot be confused with a session: the client explicitly **logs in** when it wants a session, which keeps “account exists” and “session started” as two clear steps and avoids issuing tokens before you know the client can store them safely.
+2. **Login** checks email and password, then issues two artifacts: a **JWT access token** (proof of session for APIs) and a **refresh token** (renewal channel). The access token is returned in JSON so SPAs can hold it in memory; the refresh token is **only** in an HttpOnly cookie so typical JavaScript cannot read it, which reduces exposure to XSS compared to putting refresh material in `localStorage`.
+3. **Calling protected APIs** sends `Authorization: Bearer <accessToken>`. The middleware validates the JWT and attaches `req.user` (`id`, `email`, `role`). No database hit is required for every request, which keeps hot paths fast; role in the token must match what you trust at issuance time (today there is no “role changed mid-session” invalidation—add that later if needed).
+4. **When the access token expires**, the client calls **`POST /auth/refresh`** with credentials mode so the **cookie** is sent. The server hashes the cookie value, finds the row, **deletes** it (rotation), inserts a new refresh hash, and returns a **new** access token. Rotation means a stolen refresh token stops working after the legitimate client refreshes once.
+5. **Errors** surface as JSON via `HttpError` and the global error handler (`401` for auth, `409` for duplicate email, and so on).
+
 ### Token flow
 
 1. **Access token** — short-lived JWT (`ACCESS_TOKEN_EXPIRES_SECONDS`, default 900). Sent in `Authorization: Bearer <token>`. Keep it in memory on the client; do not store it in `localStorage` if you want to limit XSS impact.
@@ -96,6 +104,31 @@ For **production** (and usually shared staging), prefer **versioned migrations**
 - **JWT** signed with `JWT_SECRET` (required); production should use a long random secret.
 - **Refresh cookies**: `httpOnly`, `sameSite: lax`, `secure` when `NODE_ENV=production`. **CORS** uses `credentials: true` and a single `CORS_ORIGIN` so browsers can send cookies to the API.
 - **Cleanup**: an in-process job runs **every 12 hours** and deletes refresh tokens with `expiresAt` in the past so the table does not grow forever.
+
+## Authorization (RBAC)
+
+### Request flow
+
+Protected routes use middleware **in order**: **`authenticateJWT`** first (validates the access token and sets `req.user`), then **`requireRole`** or **`requireRoles`** (checks `req.user.role` against allowed roles). If there is no `req.user`, the role guard responds with **`401`**. If the user is authenticated but the role is not allowed, the guard responds with **`403`**. That split makes “not logged in” and “logged in but not permitted” distinct for clients and observability.
+
+### Helpers
+
+- **`requireRoles(allowed[])`** — after authentication, allows the request if `req.user.role` is listed in `allowed`, **or** if the user is **`ADMIN`** (see below).
+- **`requireRole(role)`** — convenience for a single allowed role; implemented as `requireRoles([role])`.
+
+### Decisions
+
+- **`ADMIN` full access** — any user with role `ADMIN` passes every `requireRole` / `requireRoles` check without needing to be listed explicitly. That matches “superuser” expectations and keeps policy rules short for endpoints where admins should always help or override (support, incident response). Non-admin users are still constrained by the explicit allow-list.
+- **No resource ownership yet** — guards only inspect **role**, not whether the user owns the auction, account, or offer. Finer checks (“this manager only sees their accounts”) belong in services or repositories later and should not be implied by the current middleware.
+- **Stub routes** — the table below wires RBAC to minimal handlers so you can verify **403/201** behavior before business logic exists.
+
+### Protected routes (mounted in `app.ts`)
+
+| Method | Path | Role rule (non-admin) | Notes |
+| ------ | ---- | --------------------- | ----- |
+| `POST` | `/auctions` | `MANAGER` only | Admins may create auctions too (`ADMIN` bypass). |
+| `POST` | `/bank-offers` | `BANKER` only | Admins may submit offers too (`ADMIN` bypass). |
+| `GET` | `/accounts` | `MANAGER` or `USER` | **`BANKER` is not allowed** on account routes by design (bank staff use offers, not the shared accounts list in this policy). Admins may list accounts (`ADMIN` bypass). |
 
 ## Environment
 
