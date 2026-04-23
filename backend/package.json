@@ -7,13 +7,14 @@
     "dev": "tsx watch src/index.ts",
     "build": "prisma generate && tsc",
     "start": "node dist/index.js",
-    "lint": "eslint \"src/**/*.ts\" \"prisma.config.ts\"",
+    "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" \"prisma.config.ts\" \"vitest.config.ts\"",
     "format": "prettier --write \"src/**/*.ts\"",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
     "db:up": "docker compose up -d",
     "db:validate": "prisma validate",
+    "test": "vitest run",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -43,6 +44,7 @@
     "prisma": "^7.8.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
+    "vitest": "^3.2.4",
     "typescript-eslint": "^8.19.1"
   }
 }

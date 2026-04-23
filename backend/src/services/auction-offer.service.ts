@@ -7,7 +7,6 @@ import { mapBankerSubmitOfferResponse, type BankerSubmitOfferResponse } from "..
 import { AuctionLifecycleRepository } from "../repositories/auction-lifecycle.repository.js";
 import { AuctionOfferRepository } from "../repositories/auction-offer.repository.js";
 import type { BankOfferApiRow } from "../types/bank-offer-api.js";
-import type { EventApiRow } from "./event.service.js";
 
 export type { BankOfferApiRow } from "../types/bank-offer-api.js";
 
