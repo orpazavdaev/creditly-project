@@ -8,7 +8,6 @@ import { AccountController } from "./controllers/account.controller.js";
 import { AuctionController } from "./controllers/auction.controller.js";
 import { AuctionOfferController } from "./controllers/auction-offer.controller.js";
 import { AuthController } from "./controllers/auth.controller.js";
-import { BankOfferController } from "./controllers/bank-offer.controller.js";
 import { EventController } from "./controllers/event.controller.js";
 import { AnalyticsController } from "./controllers/analytics.controller.js";
 import { HealthController } from "./controllers/health.controller.js";
@@ -35,7 +34,6 @@ import { createAccountRouter } from "./modules/account/account.routes.js";
 import { createAnalyticsRouter } from "./modules/analytics/analytics.routes.js";
 import { createAuctionRouter } from "./modules/auction/auction.routes.js";
 import { createAuthRouter } from "./modules/auth/auth.routes.js";
-import { createBankOfferRouter } from "./modules/bank-offer/bank-offer.routes.js";
 import { createEventRouter } from "./modules/events/event.routes.js";
 import { createHealthRouter } from "./modules/health/health.routes.js";
 import { errorHandler } from "./middleware/error-handler.js";
@@ -87,7 +85,6 @@ export function createApp(env: AppEnv, eventBus: EventBus = appEventBus): expres
       )
     )
   );
-  app.use("/bank-offers", createBankOfferRouter(env, new BankOfferController()));
   app.use(
     "/accounts",
     createAccountRouter(

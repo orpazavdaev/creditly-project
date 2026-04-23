@@ -9,10 +9,6 @@ export class AuctionController {
     private readonly browseService: AuctionBrowseService
   ) {}
 
-  create = (_req: Request, res: Response): void => {
-    res.status(201).json({ created: true });
-  };
-
   listRelevantForBanker = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       if (!req.user) {

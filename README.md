@@ -27,7 +27,7 @@ The backend follows a **layered** structure so HTTP, use cases, and persistence 
 - **`mappers/`** — API-facing DTOs (for example stripping fields for banker responses).
 - **`event-bus/`** — Lightweight **in-process** pub/sub (`EventBus`: `on` / `emit`). Used for reactions after a row is written, not as a replacement for HTTP.
 - **`middleware/`** — Auth, errors, request context.
-- **`integration/`** — Outbound HTTP or external SDKs (kept thin for future real CRM).
+- **Outbound integrations** — Place HTTP clients or vendor SDKs under `src/integration/` when added (CRM today is mocked in-process).
 - **`jobs/`** — Scheduled in-process tasks.
 
 The frontend uses the **App Router**, **React Query** for server state, a shared **`apiFetch`** helper, and **`AuthProvider`** for access tokens plus refresh via cookies.

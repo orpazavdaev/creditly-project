@@ -10,20 +10,26 @@ export type AuctionCloseRow = {
 
 export class AuctionLifecycleRepository {
   expireOpenIfPastDue(auctionId: string): Promise<void> {
-    return prisma.auctionOpportunity
-      .updateMany({
-        where: {
-          id: auctionId,
-          status: "OPEN",
-          expiresAt: { lte: new Date() },
+    return prisma.$transaction(async (tx) => {
+      const row = await tx.auctionOpportunity.findUnique({
+        where: { id: auctionId },
+        select: {
+          status: true,
+          expiresAt: true,
+          _count: { select: { bankOffers: true } },
         },
-        data: {
-          status: "EXPIRED",
-          closedAt: new Date(),
-          winningOfferId: null,
-        },
-      })
-      .then(() => undefined);
+      });
+      if (!row || row.status !== "OPEN" || row.expiresAt > new Date()) {
+        return;
+      }
+      if (row._count.bankOffers > 0) {
+        return;
+      }
+      await tx.auctionOpportunity.update({
+        where: { id: auctionId },
+        data: { status: "EXPIRED", closedAt: new Date(), winningOfferId: null },
+      });
+    });
   }
 
   findForClose(auctionId: string): Promise<AuctionCloseRow | null> {

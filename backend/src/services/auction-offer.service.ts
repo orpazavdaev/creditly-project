@@ -8,8 +8,6 @@ import { AuctionLifecycleRepository } from "../repositories/auction-lifecycle.re
 import { AuctionOfferRepository } from "../repositories/auction-offer.repository.js";
 import type { BankOfferApiRow } from "../types/bank-offer-api.js";
 
-export type { BankOfferApiRow } from "../types/bank-offer-api.js";
-
 export type AuctionSummaryApi = {
   id: string;
   classification: string;
