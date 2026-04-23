@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/context/auth-context";
 import { apiFetch } from "@/lib/api";
-import { API_BASE } from "@/lib/config";
+import { queryKeys } from "@/lib/query-keys";
 import type { AccountListItem } from "@/types/api";
 import styles from "@/app/ui.module.css";
 
 export default function AccountsPage() {
+  const { user } = useAuth();
   const q = useQuery({
-    queryKey: ["accounts", API_BASE],
+    queryKey: user ? queryKeys.accounts(user.id) : ["accounts", "pending"],
     queryFn: () => apiFetch<{ accounts: AccountListItem[] }>("/accounts"),
+    enabled: Boolean(user),
   });
 
   if (q.isPending) {

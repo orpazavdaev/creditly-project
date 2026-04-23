@@ -5,8 +5,8 @@ import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { apiFetch, ApiRequestError } from "@/lib/api";
-import { API_BASE } from "@/lib/config";
 import { useAuth } from "@/context/auth-context";
+import { queryKeys } from "@/lib/query-keys";
 import type { AccountDetailItem, EventRow } from "@/types/api";
 import { canRecordDocumentUploadAndNotes } from "@/types/roles";
 import styles from "@/app/ui.module.css";
@@ -20,18 +20,18 @@ export default function AccountEventsPage() {
   const canAct = user ? canRecordDocumentUploadAndNotes(user.role) : false;
 
   const accountQ = useQuery({
-    queryKey: ["account", id, API_BASE],
+    queryKey: user ? queryKeys.account(user.id, id) : ["account", id, "pending"],
     queryFn: () => apiFetch<{ account: AccountDetailItem }>(`/accounts/${encodeURIComponent(id)}`),
-    enabled: Boolean(id),
+    enabled: Boolean(id && user),
   });
 
   const account = accountQ.data?.account;
 
   const eventsQ = useQuery({
-    queryKey: ["events", API_BASE, id],
+    queryKey: user ? queryKeys.events(user.id, id) : ["events", id, "pending"],
     queryFn: () =>
       apiFetch<{ events: EventRow[] }>(`/events?accountId=${encodeURIComponent(id)}`),
-    enabled: Boolean(id && accountQ.data?.account),
+    enabled: Boolean(id && user && accountQ.data?.account),
   });
 
   const addNote = useMutation({
@@ -45,9 +45,10 @@ export default function AccountEventsPage() {
         },
       }),
     onSuccess: () => {
+      if (!user) return;
       setNote("");
-      void qc.invalidateQueries({ queryKey: ["events", API_BASE, id] });
-      void qc.invalidateQueries({ queryKey: ["account", id, API_BASE] });
+      void qc.invalidateQueries({ queryKey: queryKeys.events(user.id, id) });
+      void qc.invalidateQueries({ queryKey: queryKeys.account(user.id, id) });
     },
   });
 
@@ -62,8 +63,9 @@ export default function AccountEventsPage() {
         },
       }),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["events", API_BASE, id] });
-      void qc.invalidateQueries({ queryKey: ["account", id, API_BASE] });
+      if (!user) return;
+      void qc.invalidateQueries({ queryKey: queryKeys.events(user.id, id) });
+      void qc.invalidateQueries({ queryKey: queryKeys.account(user.id, id) });
     },
   });
 

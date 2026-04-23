@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/context/auth-context";
 import { apiFetch } from "@/lib/api";
-import { API_BASE } from "@/lib/config";
+import { queryKeys } from "@/lib/query-keys";
 import type { BankerAuctionRow } from "@/types/api";
 import styles from "@/app/ui.module.css";
 
 export default function AuctionsPage() {
+  const { user } = useAuth();
   const q = useQuery({
-    queryKey: ["auctions", API_BASE],
+    queryKey: user ? queryKeys.auctions(user.id) : ["auctions", "pending"],
     queryFn: () => apiFetch<{ auctions: BankerAuctionRow[] }>("/auctions"),
+    enabled: Boolean(user),
   });
 
   if (q.isPending) {
@@ -36,7 +39,7 @@ export default function AuctionsPage() {
   return (
     <>
       <h1 className={styles.pageTitle}>Auctions</h1>
-      <p className={styles.pageSubtitle}>Open and recently expired auctions that match your specialisation.</p>
+      <p className={styles.pageSubtitle}>Open auctions that match your specialisation.</p>
       {rows.length === 0 ? (
         <div className={styles.card}>
           <p className={styles.muted}>No matching auctions right now.</p>

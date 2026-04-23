@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
   useCallback,
@@ -42,6 +43,7 @@ function payloadToUser(token: string): SessionUser | null {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [ready, setReady] = useState(false);
   const [accessToken, setAccessTokenState] = useState<string | null>(null);
 
@@ -82,19 +84,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return payloadToUser(accessToken);
   }, [accessToken]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const out = await apiFetch<{ accessToken: string; expiresIn: number }>("/auth/login", {
-      method: "POST",
-      auth: false,
-      credentials: "include",
-      json: { email, password },
-    });
-    setAccessToken(out.accessToken);
-  }, [setAccessToken]);
+  const login = useCallback(
+    async (email: string, password: string) => {
+      const out = await apiFetch<{ accessToken: string; expiresIn: number }>("/auth/login", {
+        method: "POST",
+        auth: false,
+        credentials: "include",
+        json: { email, password },
+      });
+      await queryClient.cancelQueries();
+      queryClient.clear();
+      setAccessToken(out.accessToken);
+    },
+    [setAccessToken, queryClient]
+  );
 
   const logout = useCallback(() => {
-    setAccessToken(null);
-  }, [setAccessToken]);
+    void (async () => {
+      await queryClient.cancelQueries();
+      queryClient.clear();
+      setAccessToken(null);
+    })();
+  }, [setAccessToken, queryClient]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

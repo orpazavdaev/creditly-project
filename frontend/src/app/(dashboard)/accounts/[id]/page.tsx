@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiRequestError } from "@/lib/api";
-import { API_BASE } from "@/lib/config";
+import { queryKeys } from "@/lib/query-keys";
 import type { AccountDetailItem } from "@/types/api";
 import { canOpenAuction } from "@/types/roles";
 import { useAuth } from "@/context/auth-context";
@@ -18,9 +18,9 @@ export default function AccountDetailPage() {
   const { user } = useAuth();
 
   const q = useQuery({
-    queryKey: ["account", id, API_BASE],
+    queryKey: user ? queryKeys.account(user.id, id) : ["account", id, "pending"],
     queryFn: () => apiFetch<{ account: AccountDetailItem }>(`/accounts/${encodeURIComponent(id)}`),
-    enabled: Boolean(id),
+    enabled: Boolean(id && user),
   });
 
   const account = q.data?.account;
@@ -35,8 +35,9 @@ export default function AccountDetailPage() {
         }
       ),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["accounts", API_BASE] });
-      void qc.invalidateQueries({ queryKey: ["account", id, API_BASE] });
+      if (!user) return;
+      void qc.invalidateQueries({ queryKey: queryKeys.accounts(user.id) });
+      void qc.invalidateQueries({ queryKey: queryKeys.account(user.id, id) });
     },
   });
 

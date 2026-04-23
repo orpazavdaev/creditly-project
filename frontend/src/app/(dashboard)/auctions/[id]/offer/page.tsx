@@ -5,7 +5,8 @@ import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { apiFetch, ApiRequestError } from "@/lib/api";
-import { API_BASE } from "@/lib/config";
+import { useAuth } from "@/context/auth-context";
+import { queryKeys } from "@/lib/query-keys";
 import type { AuctionOffersResponse } from "@/types/api";
 import styles from "@/app/ui.module.css";
 
@@ -18,13 +19,14 @@ export default function AuctionOfferPage() {
   const params = useParams();
   const auctionId = typeof params.id === "string" ? params.id : "";
   const qc = useQueryClient();
+  const { user } = useAuth();
   const [rate, setRate] = useState("3.25");
 
   const q = useQuery({
-    queryKey: ["auctionOffers", API_BASE, auctionId],
+    queryKey: user ? queryKeys.auctionOffers(user.id, auctionId) : ["auctionOffers", auctionId, "pending"],
     queryFn: () =>
       apiFetch<AuctionOffersResponse>(`/auctions/${encodeURIComponent(auctionId)}/offers`),
-    enabled: Boolean(auctionId),
+    enabled: Boolean(auctionId && user),
   });
 
   const submitAllowed = useMemo(() => (q.data ? canSubmitOffer(q.data.auction) : false), [q.data]);
@@ -39,7 +41,8 @@ export default function AuctionOfferPage() {
       });
     },
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["auctionOffers", API_BASE, auctionId] });
+      if (!user) return;
+      void qc.invalidateQueries({ queryKey: queryKeys.auctionOffers(user.id, auctionId) });
     },
   });
 
