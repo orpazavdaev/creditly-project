@@ -27,4 +27,14 @@ export class EventRepository {
       },
     });
   }
+
+  findByAccountIdWithActorForActorUser(accountId: string, actorUserId: string) {
+    return prisma.event.findMany({
+      where: { accountId, userId: actorUserId },
+      orderBy: { createdAt: "desc" },
+      include: {
+        user: { select: { email: true } },
+      },
+    });
+  }
 }

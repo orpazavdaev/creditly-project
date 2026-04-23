@@ -56,8 +56,14 @@ export class EventService {
   }
 
   async listByAccount(user: AuthUser, accountId: string): Promise<{ events: EventApiRow[] }> {
+    if (user.role !== "ADMIN" && user.role !== "USER") {
+      throw new HttpError(403, "Forbidden", "forbidden");
+    }
     await this.accountAccess.assertStaffCanAccessAccount(user, accountId);
-    const rows = await this.repo.findByAccountIdWithActor(accountId);
+    const rows =
+      user.role === "ADMIN"
+        ? await this.repo.findByAccountIdWithActor(accountId)
+        : await this.repo.findByAccountIdWithActorForActorUser(accountId, user.id);
     return { events: rows.map((r) => this.toApi(r, r.user.email)) };
   }
 

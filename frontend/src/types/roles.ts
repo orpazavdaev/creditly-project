@@ -28,3 +28,7 @@ export function canManageAuctionForAccount(
 export function canRecordDocumentUploadAndNotes(role: string): boolean {
   return role === "ADMIN" || role === "USER";
 }
+
+export function canViewAccountEvents(role: string): boolean {
+  return role === "ADMIN" || role === "USER";
+}

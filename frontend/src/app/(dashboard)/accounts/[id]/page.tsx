@@ -11,6 +11,7 @@ import { SPECIALISATION_VALUES, type Specialisation } from "@/types/domain";
 import {
   canManageAuctionForAccount,
   canOpenAuction,
+  canViewAccountEvents,
 } from "@/types/roles";
 import { useAuth } from "@/context/auth-context";
 import styles from "@/app/ui.module.css";
@@ -142,9 +143,11 @@ export default function AccountDetailPage() {
           )}
         </dl>
         <div className={styles.actions}>
-          <Link href={`/accounts/${account.id}/events`} className={styles.btnSecondary} style={{ display: "inline-block", textAlign: "center" }}>
-            View events
-          </Link>
+          {user && canViewAccountEvents(user.role) && (
+            <Link href={`/accounts/${account.id}/events`} className={styles.btnSecondary} style={{ display: "inline-block", textAlign: "center" }}>
+              View events
+            </Link>
+          )}
           {showOpenAuction && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
               <label className={styles.muted} htmlFor="cls">

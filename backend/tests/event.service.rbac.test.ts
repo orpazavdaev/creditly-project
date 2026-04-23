@@ -71,4 +71,86 @@ describe("EventService RBAC for timeline writes", () => {
     expect(out.event.createdByLabel).toBe("u");
     expect(repo.create).toHaveBeenCalled();
   });
+
+  it("forbids MANAGER from listing events", async () => {
+    const repo = {
+      findByAccountIdWithActor: vi.fn(),
+      findByAccountIdWithActorForActorUser: vi.fn(),
+    } as unknown as EventRepository;
+    const bus = { emit: vi.fn() } as unknown as EventBus;
+    const access = {
+      assertStaffCanAccessAccount: vi.fn().mockResolvedValue(undefined),
+    } as unknown as AccountAccessService;
+    const svc = new EventService(repo, bus, access);
+
+    await expect(svc.listByAccount({ id: "m1", email: "m@x.com", role: "MANAGER" }, "acc1")).rejects.toMatchObject({
+      status: 403,
+    });
+    expect(repo.findByAccountIdWithActor).not.toHaveBeenCalled();
+  });
+
+  it("lists only the USER own events for USER role", async () => {
+    const rows = [
+      {
+        id: "e1",
+        accountId: "acc1",
+        userId: "u1",
+        type: "NOTE_ADDED" as const,
+        createdAt: new Date(),
+        metadata: {},
+        user: { email: "u@x.com" },
+      },
+    ];
+    const repo = {
+      findByAccountIdWithActor: vi.fn(),
+      findByAccountIdWithActorForActorUser: vi.fn().mockResolvedValue(rows),
+    } as unknown as EventRepository;
+    const bus = { emit: vi.fn() } as unknown as EventBus;
+    const access = {
+      assertStaffCanAccessAccount: vi.fn().mockResolvedValue(undefined),
+    } as unknown as AccountAccessService;
+    const svc = new EventService(repo, bus, access);
+
+    const out = await svc.listByAccount({ id: "u1", email: "u@x.com", role: "USER" }, "acc1");
+    expect(out.events).toHaveLength(1);
+    expect(repo.findByAccountIdWithActorForActorUser).toHaveBeenCalledWith("acc1", "u1");
+    expect(repo.findByAccountIdWithActor).not.toHaveBeenCalled();
+  });
+
+  it("lists all account events for ADMIN", async () => {
+    const rows = [
+      {
+        id: "e1",
+        accountId: "acc1",
+        userId: "u1",
+        type: "NOTE_ADDED" as const,
+        createdAt: new Date(),
+        metadata: {},
+        user: { email: "u@x.com" },
+      },
+      {
+        id: "e2",
+        accountId: "acc1",
+        userId: "u2",
+        type: "NOTE_ADDED" as const,
+        createdAt: new Date(),
+        metadata: {},
+        user: { email: "v@x.com" },
+      },
+    ];
+    const repo = {
+      findByAccountIdWithActor: vi.fn().mockResolvedValue(rows),
+      findByAccountIdWithActorForActorUser: vi.fn(),
+    } as unknown as EventRepository;
+    const bus = { emit: vi.fn() } as unknown as EventBus;
+    const access = {
+      assertStaffCanAccessAccount: vi.fn().mockResolvedValue(undefined),
+    } as unknown as AccountAccessService;
+    const svc = new EventService(repo, bus, access);
+
+    const out = await svc.listByAccount({ id: "a1", email: "a@x.com", role: "ADMIN" }, "acc1");
+    expect(out.events).toHaveLength(2);
+    expect(repo.findByAccountIdWithActor).toHaveBeenCalledWith("acc1");
+    expect(repo.findByAccountIdWithActorForActorUser).not.toHaveBeenCalled();
+  });
 });

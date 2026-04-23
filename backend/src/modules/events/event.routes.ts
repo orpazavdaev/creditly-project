@@ -7,8 +7,8 @@ import { requireRoles } from "../../middleware/require-role.js";
 export function createEventRouter(env: AppEnv, controller: EventController): Router {
   const r = Router();
   const auth = authenticateJWT(env);
-  const staffOnly = requireRoles(["ADMIN", "MANAGER", "USER"]);
-  r.post("/", auth, staffOnly, controller.create);
-  r.get("/", auth, staffOnly, controller.list);
+  const eventsReadWrite = requireRoles(["ADMIN", "USER"]);
+  r.post("/", auth, eventsReadWrite, controller.create);
+  r.get("/", auth, eventsReadWrite, controller.list);
   return r;
 }
