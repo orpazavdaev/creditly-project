@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { apiFetch, ApiRequestError } from "@/lib/api";
+import { apiFetch, getApiErrorMessage } from "@/lib/api";
 import { useAuth } from "@/context/auth-context";
 import { queryKeys } from "@/lib/query-keys";
 import type { AccountDetailItem, EventRow } from "@/types/api";
@@ -71,7 +71,7 @@ export default function AccountEventsPage() {
 
   if (accountQ.isPending) return <p className={styles.muted}>Loading…</p>;
   if (accountQ.isError) {
-    return <div className={styles.errorBox}>{accountQ.error instanceof Error ? accountQ.error.message : "Error"}</div>;
+    return <div className={styles.errorBox}>{getApiErrorMessage(accountQ.error, "Error")}</div>;
   }
   if (!account) {
     return (
@@ -110,9 +110,7 @@ export default function AccountEventsPage() {
               </button>
               {uploadDocument.isError && (
                 <div className={styles.errorBox} style={{ marginTop: "0.5rem", marginBottom: 0 }}>
-                  {uploadDocument.error instanceof ApiRequestError
-                    ? uploadDocument.error.message
-                    : "Failed"}
+                  {getApiErrorMessage(uploadDocument.error, "Failed")}
                 </div>
               )}
             </div>
@@ -138,7 +136,7 @@ export default function AccountEventsPage() {
               </button>
               {addNote.isError && (
                 <div className={styles.errorBox} style={{ marginTop: "0.5rem", marginBottom: 0 }}>
-                  {addNote.error instanceof ApiRequestError ? addNote.error.message : "Failed"}
+                  {getApiErrorMessage(addNote.error, "Failed")}
                 </div>
               )}
             </div>
@@ -152,7 +150,7 @@ export default function AccountEventsPage() {
       {eventsQ.isLoading && <p className={styles.muted}>Loading events…</p>}
       {eventsQ.isError && (
         <div className={styles.errorBox}>
-          {eventsQ.error instanceof Error ? eventsQ.error.message : "Failed to load events"}
+          {getApiErrorMessage(eventsQ.error, "Failed to load events")}
         </div>
       )}
       {eventsQ.data && (

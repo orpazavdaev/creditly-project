@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/auth-context";
-import { ApiRequestError } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/api";
 import { isBankerRole } from "@/types/roles";
 import styles from "@/app/ui.module.css";
 
@@ -37,7 +37,7 @@ export default function LoginPage() {
               await login(email.trim(), password);
               router.replace("/");
             } catch (err) {
-              setError(err instanceof ApiRequestError ? err.message : "Sign in failed");
+              setError(getApiErrorMessage(err, "Sign in failed"));
             } finally {
               setPending(false);
             }

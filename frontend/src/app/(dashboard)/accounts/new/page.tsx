@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useAuth } from "@/context/auth-context";
-import { apiFetch, ApiRequestError } from "@/lib/api";
+import { apiFetch, getApiErrorMessage } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import type { AccountListItem } from "@/types/api";
 import styles from "@/app/ui.module.css";
@@ -95,7 +95,7 @@ export default function NewAccountPage() {
         </div>
         {create.isError && (
           <div className={styles.errorBox} style={{ marginTop: "1rem", marginBottom: 0 }}>
-            {create.error instanceof ApiRequestError ? create.error.message : "Could not create"}
+            {getApiErrorMessage(create.error, "Could not create")}
           </div>
         )}
       </div>

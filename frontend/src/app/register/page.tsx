@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/auth-context";
-import { apiFetch, ApiRequestError } from "@/lib/api";
+import { apiFetch, getApiErrorMessage } from "@/lib/api";
 import { isBankerRole } from "@/types/roles";
 import type { RegisterBody } from "@/types/api";
 import { USER_ROLE_VALUES, type UserRole } from "@/types/domain";
@@ -53,7 +53,7 @@ export default function RegisterPage() {
                 });
                 setDone(true);
               } catch (err) {
-                setError(err instanceof ApiRequestError ? err.message : "Registration failed");
+                setError(getApiErrorMessage(err, "Registration failed"));
               } finally {
                 setPending(false);
               }

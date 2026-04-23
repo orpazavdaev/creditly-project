@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { apiFetch, ApiRequestError } from "@/lib/api";
+import { apiFetch, getApiErrorMessage } from "@/lib/api";
 import { useAuth } from "@/context/auth-context";
 import { queryKeys } from "@/lib/query-keys";
 import type { AuctionOffersResponse } from "@/types/api";
@@ -60,7 +60,7 @@ export default function AuctionOfferPage() {
   if (q.isError) {
     return (
       <>
-        <div className={styles.errorBox}>{q.error instanceof Error ? q.error.message : "Failed to load"}</div>
+        <div className={styles.errorBox}>{getApiErrorMessage(q.error, "Failed to load")}</div>
         <Link href={isAdmin ? "/staff-auctions" : "/auctions"} className={styles.link}>
           {isAdmin ? "← All auctions" : "← Auctions"}
         </Link>
@@ -131,11 +131,7 @@ export default function AuctionOfferPage() {
         )}
         {submit.isError && (
           <div className={styles.errorBox} style={{ marginTop: "1rem", marginBottom: 0 }}>
-            {submit.error instanceof ApiRequestError
-              ? submit.error.message
-              : submit.error instanceof Error
-                ? submit.error.message
-                : "Submit failed"}
+            {getApiErrorMessage(submit.error, "Submit failed")}
           </div>
         )}
       </div>

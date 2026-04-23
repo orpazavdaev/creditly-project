@@ -11,6 +11,12 @@ export class ApiRequestError extends Error {
   }
 }
 
+export function getApiErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiRequestError) return err.message;
+  if (err instanceof Error) return err.message;
+  return fallback;
+}
+
 function getStoredToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(ACCESS_TOKEN_KEY);
@@ -43,7 +49,25 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
     headers,
     body: json !== undefined ? JSON.stringify(json) : rest.body,
   });
-  const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+  const text = await res.text();
+  let data: { error?: string; message?: string } = {};
+  if (text.length > 0) {
+    try {
+      data = JSON.parse(text) as { error?: string; message?: string };
+    } catch {
+      if (!res.ok) {
+        const snippet = text.length > 240 ? `${text.slice(0, 240)}…` : text;
+        throw new ApiRequestError(res.status, "invalid_response", snippet || `HTTP ${res.status}`);
+      }
+      throw new ApiRequestError(
+        res.status,
+        "invalid_response",
+        "Unexpected response from server"
+      );
+    }
+  } else if (!res.ok) {
+    throw new ApiRequestError(res.status, "request_failed", `HTTP ${res.status}`);
+  }
   if (!res.ok) {
     throw new ApiRequestError(
       res.status,

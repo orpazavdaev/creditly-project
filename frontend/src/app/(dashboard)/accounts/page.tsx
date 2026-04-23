@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/context/auth-context";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getApiErrorMessage } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import type { AccountListItem } from "@/types/api";
 import { canCreateAccount } from "@/types/roles";
@@ -30,7 +30,7 @@ export default function AccountsPage() {
     return (
       <>
         <h1 className={styles.pageTitle}>Accounts</h1>
-        <div className={styles.errorBox}>{q.error instanceof Error ? q.error.message : "Failed to load"}</div>
+        <div className={styles.errorBox}>{getApiErrorMessage(q.error, "Failed to load")}</div>
       </>
     );
   }

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { apiFetch, ApiRequestError } from "@/lib/api";
+import { apiFetch, getApiErrorMessage } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import type { AccountDetailItem } from "@/types/api";
 import { SPECIALISATION_VALUES, type Specialisation } from "@/types/domain";
@@ -78,7 +78,7 @@ export default function AccountDetailPage() {
   }
 
   if (q.isError) {
-    return <div className={styles.errorBox}>{q.error instanceof Error ? q.error.message : "Error"}</div>;
+    return <div className={styles.errorBox}>{getApiErrorMessage(q.error, "Error")}</div>;
   }
 
   if (!account) {
@@ -186,16 +186,12 @@ export default function AccountDetailPage() {
         </div>
         {createAuction.isError && (
           <div className={styles.errorBox} style={{ marginTop: "1rem", marginBottom: 0 }}>
-            {createAuction.error instanceof ApiRequestError
-              ? createAuction.error.message
-              : "Could not open auction"}
+            {getApiErrorMessage(createAuction.error, "Could not open auction")}
           </div>
         )}
         {closeAuction.isError && (
           <div className={styles.errorBox} style={{ marginTop: "1rem", marginBottom: 0 }}>
-            {closeAuction.error instanceof ApiRequestError
-              ? closeAuction.error.message
-              : "Could not close auction"}
+            {getApiErrorMessage(closeAuction.error, "Could not close auction")}
           </div>
         )}
         {createAuction.isSuccess && createAuction.data?.auction?.id && (

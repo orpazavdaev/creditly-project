@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/context/auth-context";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getApiErrorMessage } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import type { BankerAuctionRow } from "@/types/api";
 import styles from "@/app/ui.module.css";
@@ -29,7 +29,7 @@ export default function AuctionsPage() {
     return (
       <>
         <h1 className={styles.pageTitle}>Auctions</h1>
-        <div className={styles.errorBox}>{q.error instanceof Error ? q.error.message : "Failed to load"}</div>
+        <div className={styles.errorBox}>{getApiErrorMessage(q.error, "Failed to load")}</div>
       </>
     );
   }
