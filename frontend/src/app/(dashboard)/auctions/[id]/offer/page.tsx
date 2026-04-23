@@ -68,7 +68,12 @@ export default function AuctionOfferPage() {
     );
   }
 
-  const { auction, offers } = q.data;
+  const data = q.data;
+  if (!data) {
+    return <p className={styles.muted}>No auction data.</p>;
+  }
+
+  const { auction, offers } = data;
   const backHref = isAdmin ? "/staff-auctions" : "/auctions";
   const backLabel = isAdmin ? "← All auctions" : "← Auctions";
 
