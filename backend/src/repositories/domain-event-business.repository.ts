@@ -4,8 +4,8 @@ import { prisma } from "./prisma.js";
 export class DomainEventBusinessRepository {
   updateAccountDocumentState(accountId: string, lastActivity: Date): Promise<void> {
     return prisma.account
-      .update({
-        where: { id: accountId },
+      .updateMany({
+        where: { id: accountId, status: "NEW" },
         data: { status: "READY_FOR_AUCTION", lastActivity },
       })
       .then(() => undefined);

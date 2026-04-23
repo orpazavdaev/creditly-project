@@ -37,10 +37,8 @@ export class EventService {
     if (!prismaType) {
       throw new HttpError(400, "Invalid type", "invalid_type");
     }
-    if (prismaType === "DOCUMENT_UPLOADED" || prismaType === "NOTE_ADDED") {
-      if (user.role !== "ADMIN" && user.role !== "USER") {
-        throw new HttpError(403, "Forbidden", "forbidden");
-      }
+    if (user.role !== "ADMIN" && user.role !== "USER") {
+      throw new HttpError(403, "Forbidden", "forbidden");
     }
     await this.accountAccess.assertStaffCanAccessAccount(user, accountId);
     let meta: Prisma.InputJsonValue = {};

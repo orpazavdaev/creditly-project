@@ -117,4 +117,95 @@ describe("DomainEventBusinessService auction close", () => {
     expect(repoFns.closeAuctionAndMarkAccountWon).not.toHaveBeenCalled();
     expect(emit).not.toHaveBeenCalled();
   });
+
+  it("tie-break uses earliest createdAt when rates are equal", async () => {
+    const earlier: BankOffer = {
+      id: "offer-earlier",
+      auctionOpportunityId: "auc1",
+      bankId: "b1",
+      bankerId: "bk1",
+      totalInterestRate: 3.5,
+      createdAt: new Date("2026-01-01T10:00:00Z"),
+    };
+    const later: BankOffer = {
+      id: "offer-later",
+      auctionOpportunityId: "auc1",
+      bankId: "b2",
+      bankerId: "bk2",
+      totalInterestRate: 3.5,
+      createdAt: new Date("2026-01-02T10:00:00Z"),
+    };
+    const auction = {
+      id: "auc1",
+      accountId: "acc1",
+      winningOfferId: null,
+      classification: "NEW_MORTGAGE" as const,
+      status: "OPEN" as const,
+      openedBy: "m1",
+      openedAt: new Date(),
+      expiresAt: new Date(),
+      closedAt: null,
+      bankOffers: [earlier, later],
+    } as AuctionOpportunity & { bankOffers: BankOffer[] };
+
+    const repoFns = baseRepo();
+    repoFns.findAuctionWithOffersByAccountId.mockResolvedValue(auction);
+    const emit = vi.fn();
+    const bus = { emit } as unknown as EventBus;
+    const svc = new DomainEventBusinessService(repoFns as unknown as DomainEventBusinessRepository, bus);
+
+    await svc.applyOnEventCreated({
+      id: "ev3",
+      accountId: "acc1",
+      userId: "m1",
+      type: "AUCTION_CLOSED",
+      typeApi: "auction_closed",
+      createdAt: new Date(),
+      metadata: {},
+    });
+
+    expect(repoFns.closeAuctionAndMarkAccountWon).toHaveBeenCalledWith(
+      "auc1",
+      "acc1",
+      "offer-earlier",
+      expect.any(Date)
+    );
+  });
+
+  it("sets high activity when more than three events in last 24h", async () => {
+    const repoFns = baseRepo();
+    repoFns.countEventsSince.mockResolvedValue(4);
+    const bus = { emit: vi.fn() } as unknown as EventBus;
+    const svc = new DomainEventBusinessService(repoFns as unknown as DomainEventBusinessRepository, bus);
+
+    await svc.applyOnEventCreated({
+      id: "ev4",
+      accountId: "acc1",
+      userId: "u1",
+      type: "NOTE_ADDED",
+      typeApi: "note_added",
+      createdAt: new Date(),
+      metadata: {},
+    });
+
+    expect(repoFns.updateAccountHighActivity).toHaveBeenCalledWith("acc1", true);
+  });
+
+  it("runs document workflow on DOCUMENT_UPLOADED", async () => {
+    const repoFns = baseRepo();
+    const bus = { emit: vi.fn() } as unknown as EventBus;
+    const svc = new DomainEventBusinessService(repoFns as unknown as DomainEventBusinessRepository, bus);
+
+    await svc.applyOnEventCreated({
+      id: "ev5",
+      accountId: "acc1",
+      userId: "u1",
+      type: "DOCUMENT_UPLOADED",
+      typeApi: "document_uploaded",
+      createdAt: new Date(),
+      metadata: {},
+    });
+
+    expect(repoFns.updateAccountDocumentState).toHaveBeenCalledWith("acc1", expect.any(Date));
+  });
 });

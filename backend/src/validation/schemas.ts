@@ -49,15 +49,10 @@ export const RegisterBodySchema = z.object({
   role: z.enum(["ADMIN", "MANAGER", "USER", "BANKER"]),
 });
 
-export const EventCreateBodySchema = z.object({
-  accountId: z.string().min(1, "accountId is required"),
-  type: z.enum([
-    "document_uploaded",
-    "note_added",
-    "status_changed",
-    "auction_opened",
-    "offer_submitted",
-    "auction_closed",
-  ]),
-  metadata: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
-});
+export const EventCreateBodySchema = z
+  .object({
+    accountId: z.string().min(1, "accountId is required"),
+    type: z.enum(["document_uploaded", "note_added"]),
+    metadata: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
+  })
+  .strict();

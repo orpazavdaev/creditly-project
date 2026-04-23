@@ -1,21 +1,27 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+vi.mock("../src/integration/crm-mock.js", () => ({
+  crmPushMock: vi.fn().mockResolvedValue(undefined),
+}));
+
+import { crmPushMock } from "../src/integration/crm-mock.js";
 import { CrmService } from "../src/services/crm.service.js";
 import type { AccountSyncRepository } from "../src/repositories/account-sync.repository.js";
-import type { DomainEventCreatedPayload } from "../src/event-bus/domain-events.js";
 
-describe("CrmService failure handling", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
+describe("CrmService", () => {
+  beforeEach(() => {
+    vi.mocked(crmPushMock).mockClear();
+    vi.mocked(crmPushMock).mockResolvedValue(undefined);
   });
 
-  it("persists FAILED sync when mock CRM push rejects", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0);
-    const markSuccess = vi.fn().mockResolvedValue(undefined);
-    const markFailed = vi.fn().mockResolvedValue(undefined);
-    const sync = { markSuccess, markFailed } as unknown as AccountSyncRepository;
-    const crm = new CrmService(sync);
+  it("pushes CRM for DOCUMENT_UPLOADED and marks success", async () => {
+    const sync = {
+      markSuccess: vi.fn().mockResolvedValue(undefined),
+      markFailed: vi.fn().mockResolvedValue(undefined),
+    } as unknown as AccountSyncRepository;
+    const svc = new CrmService(sync);
 
-    const payload: DomainEventCreatedPayload = {
+    await svc.handleAfterDomainEvent({
       id: "e1",
       accountId: "acc1",
       userId: "u1",
@@ -23,34 +29,52 @@ describe("CrmService failure handling", () => {
       typeApi: "document_uploaded",
       createdAt: new Date(),
       metadata: {},
-    };
-    await crm.handleAfterDomainEvent(payload);
+    });
 
-    expect(markSuccess).not.toHaveBeenCalled();
-    expect(markFailed).toHaveBeenCalledTimes(1);
-    expect(markFailed.mock.calls[0][0]).toBe("acc1");
-    expect(String(markFailed.mock.calls[0][1])).toContain("CRM mock rejected");
+    expect(crmPushMock).toHaveBeenCalledWith("acc1", "event:document_uploaded");
+    expect(sync.markSuccess).toHaveBeenCalledWith("acc1");
+    expect(sync.markFailed).not.toHaveBeenCalled();
   });
 
-  it("persists SUCCESS when mock CRM push succeeds", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.99);
-    const markSuccess = vi.fn().mockResolvedValue(undefined);
-    const markFailed = vi.fn().mockResolvedValue(undefined);
-    const sync = { markSuccess, markFailed } as unknown as AccountSyncRepository;
-    const crm = new CrmService(sync);
+  it("does not call CRM mock for AUCTION_CLOSED (winner path uses winning_offer_selected)", async () => {
+    const sync = {
+      markSuccess: vi.fn().mockResolvedValue(undefined),
+      markFailed: vi.fn().mockResolvedValue(undefined),
+    } as unknown as AccountSyncRepository;
+    const svc = new CrmService(sync);
 
-    const payload: DomainEventCreatedPayload = {
+    await svc.handleAfterDomainEvent({
       id: "e2",
+      accountId: "acc1",
+      userId: "m1",
+      type: "AUCTION_CLOSED",
+      typeApi: "auction_closed",
+      createdAt: new Date(),
+      metadata: {},
+    });
+
+    expect(crmPushMock).not.toHaveBeenCalled();
+    expect(sync.markSuccess).not.toHaveBeenCalled();
+  });
+
+  it("persists failure when CRM mock rejects", async () => {
+    vi.mocked(crmPushMock).mockRejectedValueOnce(new Error("CRM down"));
+    const sync = {
+      markSuccess: vi.fn().mockResolvedValue(undefined),
+      markFailed: vi.fn().mockResolvedValue(undefined),
+    } as unknown as AccountSyncRepository;
+    const svc = new CrmService(sync);
+
+    await svc.handleAfterDomainEvent({
+      id: "e3",
       accountId: "acc2",
       userId: "u1",
       type: "AUCTION_OPENED",
       typeApi: "auction_opened",
       createdAt: new Date(),
       metadata: {},
-    };
-    await crm.handleAfterDomainEvent(payload);
+    });
 
-    expect(markSuccess).toHaveBeenCalledWith("acc2");
-    expect(markFailed).not.toHaveBeenCalled();
+    expect(sync.markFailed).toHaveBeenCalledWith("acc2", "CRM down");
   });
 });

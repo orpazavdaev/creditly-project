@@ -111,7 +111,7 @@ A **blind** auction here means bankers compete on **rate** and **timing** withou
 
 **Closing and outcomes**
 
-- Staff (**`MANAGER`** / **`ADMIN`**) close an auction via **`POST /auctions/:id/close`**, which records an **`AUCTION_CLOSED`** domain event; business logic then runs on the event pipeline.
+- Staff (**`MANAGER`** / **`ADMIN`**) close an auction via **`POST /auctions/:id/close`**, which records an **`AUCTION_CLOSED`** domain event, then runs **`DomainEventBusinessService.applyOnEventCreated`** in the same request (winner selection or finalize no-bid paths) before **`event.created`** is emitted for audit subscribers (**CRM** does not sync on **`AUCTION_CLOSED`**; winning path uses **`winning.offer.selected`**).
 - **Winner selection**: among offers, lowest **`totalInterestRate`** wins; ties break on **earliest `createdAt`** (repository `orderBy`).
 - **No offers**: auction becomes **`EXPIRED`** (not **`CLOSED`** / no **`WON`** on the account). **With offers**: auction **`CLOSED`**, **`winningOfferId`** set, account **`WON`**.
 
@@ -125,12 +125,18 @@ Two related concepts coexist:
 
 1. **Persisted `Event` rows** — The audit **timeline** per account. Created through **`EventService`** (and other flows that write events). **`userId` on the row always comes from the authenticated user**, never from an untrusted body field.
 
-2. **In-process `EventBus`** — After insert, **`publishEventCreated`** emits **`event.created`** with a **`DomainEventCreatedPayload`** so subscribers can run **without** bloating the HTTP handler.
+2. **In-process `EventBus`** — After the row is written and **synchronous** domain reactions complete, **`publishEventCreated`** emits **`event.created`** with a **`DomainEventCreatedPayload`** so subscribers can run **without** bloating the HTTP handler.
+
+**Order of operations (staff-created events via `POST /events`)**
+
+- Persist the `Event` row.
+- Run **`DomainEventBusinessService.applyOnEventCreated`** in **`EventService`** (same request): account readiness after **`DOCUMENT_UPLOADED`**, high-activity window, and any other rules tied to the new event type.
+- Emit **`event.created`** for **asynchronous** subscribers only (today: **CRM mock** for eligible types).
 
 **Listeners** (registered in **`registerEventBusListeners`** before the app accepts traffic):
 
-- **Domain event pipeline** — On **`event.created`**, runs **`DomainEventBusinessService.applyOnEventCreated`** (document → account readiness, rolling high-activity flag, auction close / expire / win selection) and then **`CrmService.handleAfterDomainEvent`** so CRM side effects do not race the same business step.
-- **Winning offer** — When a winner is chosen, **`DomainEventBusinessService`** emits **`winning.offer.selected`**; a dedicated listener calls **`CrmService.handleWinningOfferSelected`**.
+- **`event.created`** — **`CrmService.handleAfterDomainEvent`** for **`DOCUMENT_UPLOADED`**, **`STATUS_CHANGED`**, and **`AUCTION_OPENED`** only (other types no-op). Failures set **`syncStatus`** / **`failureReason`** on the account.
+- **`winning.offer.selected`** — **`CrmService.handleWinningOfferSelected`** after a winning offer is recorded.
 
 **CRM** in this repo is a **mock** with random failures to exercise **`Account.syncStatus`** / **`failureReason`**.
 
@@ -180,7 +186,7 @@ This repository ships **`prisma/schema.prisma`** and uses **`prisma db push`** (
 | -------- | ----------------- | ------------- |
 | `POST /auth/login` | `LoginBodySchema` | `AuthService.login` |
 | `POST /auth/register` | `RegisterBodySchema` | `AuthService.register` |
-| `POST /events` | `EventCreateBodySchema` | `EventService.create` |
+| `POST /events` | `EventCreateBodySchema` (strict; `type` is `document_uploaded` \| `note_added` only) | `EventService.create` |
 | `GET /events?accountId=` | `EventsListQuerySchema` + `firstQueryString` | `EventController.list` |
 | `GET/POST …/:id…` (accounts, auctions) | `PathAccountIdSchema`, `PathAuctionIdSchema` | Account, auction, offer controllers |
 | `POST /accounts/:id/auctions` | `OpenAuctionBodySchema` (strict; optional `classification`) | `AccountAuctionService.createForAccount` |
@@ -234,7 +240,7 @@ Set `NEXT_PUBLIC_API_URL` in `frontend/.env` to the API origin (see `frontend/.e
 | -------- | ------- | ------- |
 | `backend` | `npm run dev` | API with reload |
 | `backend` | `npm run build` / `npm start` | Compile and run production |
-| `backend` | `npm run test` | Vitest suite under `backend/tests/` |
+| `backend` | `npm run test` | Vitest suite under `backend/tests/` (see **Testing** below) |
 | `backend` | `npm run lint` / `npm run format` | ESLint / Prettier |
 | `backend` | `npm run db:up` | Local Postgres (Docker Compose) |
 | `backend` | `npm run db:push` | Apply schema (`prisma db push`) |
@@ -243,6 +249,22 @@ Set `NEXT_PUBLIC_API_URL` in `frontend/.env` to the API origin (see `frontend/.e
 | `frontend` | `npm run build` / `npm start` | Production build and run |
 
 `npm run build` in the backend runs **`prisma generate`** before **`tsc`**.
+
+---
+
+## Testing
+
+The backend ships a **Vitest** suite (`cd backend && npm run test`). Tests are **unit-level** with **repository and integration boundaries mocked** so they run quickly without a database, while still exercising services, RBAC helpers, validation, and CRM orchestration.
+
+**Why these areas are covered**
+
+- **RBAC and data scope** — Wrong role or wrong account access is a security and compliance defect. Tests assert bankers cannot use staff account APIs, users and managers only see in-scope accounts, and event APIs reject disallowed roles.
+- **Banker data minimization** — Offer responses must not leak `accountId` or customer identifiers to the banker client; a mapper test locks that contract.
+- **Auction rules** — Submitting offers on non-open or expired auctions must fail with stable error codes; this protects integrity and matches UI expectations.
+- **Domain reactions on events** — `DOCUMENT_UPLOADED` transitions **`NEW` → `READY_FOR_AUCTION`**, high-activity counts use a 24-hour window, and winner selection uses lowest rate then earliest offer; these are central business rules.
+- **Event-driven CRM** — The mock CRM is invoked from **`CrmService`** paths triggered by domain payloads; tests assert success updates sync state and failures persist **`FAILED`** plus **`failureReason`**, and that CRM is not invoked for unrelated event types.
+
+Together, the suite favors **short, readable tests** on **high-risk paths** rather than blanket coverage of every controller line.
 
 ---
 
