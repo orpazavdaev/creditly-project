@@ -7,6 +7,12 @@ import { requireRoles } from "../../middleware/require-role.js";
 export function createAccountRouter(env: AppEnv, controller: AccountController): Router {
   const r = Router();
   const auth = authenticateJWT(env);
+  r.post(
+    "/:id/auctions",
+    auth,
+    requireRoles(["MANAGER"]),
+    controller.createAuctionForAccount
+  );
   r.get("/", auth, requireRoles(["MANAGER", "USER"]), controller.list);
   return r;
 }

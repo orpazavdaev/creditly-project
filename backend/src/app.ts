@@ -13,6 +13,7 @@ import { HealthController } from "./controllers/health.controller.js";
 import { AuthRepository } from "./repositories/auth.repository.js";
 import { EventRepository } from "./repositories/event.repository.js";
 import { HealthRepository } from "./repositories/health.repository.js";
+import { AccountAuctionService } from "./services/account-auction.service.js";
 import { AuthService } from "./services/auth.service.js";
 import { EventService } from "./services/event.service.js";
 import { HealthService } from "./services/health.service.js";
@@ -51,7 +52,10 @@ export function createApp(env: AppEnv, eventBus: EventBus = appEventBus): expres
 
   app.use("/auctions", createAuctionRouter(env, new AuctionController()));
   app.use("/bank-offers", createBankOfferRouter(env, new BankOfferController()));
-  app.use("/accounts", createAccountRouter(env, new AccountController()));
+  app.use(
+    "/accounts",
+    createAccountRouter(env, new AccountController(new AccountAuctionService(eventBus)))
+  );
   app.use(
     "/events",
     createEventRouter(env, new EventController(new EventService(new EventRepository(), eventBus)))
