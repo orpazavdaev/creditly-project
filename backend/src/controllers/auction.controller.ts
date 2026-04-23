@@ -2,6 +2,8 @@ import type { NextFunction, Request, Response } from "express";
 import type { AuctionBrowseService } from "../services/auction-browse.service.js";
 import type { AuctionCloseService } from "../services/auction-close.service.js";
 import { HttpError } from "../utils/http-error.js";
+import { parseParams } from "../validation/parse-body.js";
+import { PathAuctionIdSchema } from "../validation/schemas.js";
 
 export class AuctionController {
   constructor(
@@ -28,11 +30,7 @@ export class AuctionController {
         next(new HttpError(401, "Unauthorized", "unauthorized"));
         return;
       }
-      const id = req.params.id;
-      if (typeof id !== "string" || !id) {
-        next(new HttpError(400, "Invalid auction id", "invalid_params"));
-        return;
-      }
+      const { id } = parseParams(PathAuctionIdSchema, req.params);
       const out = await this.closeService.closeByManager(req.user, id);
       res.status(200).json(out);
     } catch (e) {

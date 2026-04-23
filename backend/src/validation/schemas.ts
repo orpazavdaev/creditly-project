@@ -1,5 +1,34 @@
 import { z } from "zod";
 
+export const PathAccountIdSchema = z.object({
+  id: z.string().min(1, "Invalid account id"),
+});
+
+export const PathAuctionIdSchema = z.object({
+  id: z.string().min(1, "Invalid auction id"),
+});
+
+export const EventsListQuerySchema = z.object({
+  accountId: z.string().min(1, "accountId query parameter is required"),
+});
+
+export const SpecialisationEnum = z.enum([
+  "NEW_MORTGAGE",
+  "REFINANCE",
+  "PERSONAL_LOAN",
+  "BUSINESS_LOAN",
+]);
+
+export const OpenAuctionBodySchema = z
+  .object({
+    classification: SpecialisationEnum.optional(),
+  })
+  .strict();
+
+export const SubmitOfferBodySchema = z.object({
+  totalInterestRate: z.coerce.number().finite().positive(),
+});
+
 export const LoginBodySchema = z.object({
   email: z.string().min(1, "email is required"),
   password: z.string().min(1, "password is required"),

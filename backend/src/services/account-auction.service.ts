@@ -5,19 +5,10 @@ import { HttpError } from "../utils/http-error.js";
 import { eventTypeToApi } from "../utils/event-type-api.js";
 import { AccountAuctionRepository } from "../repositories/account-auction.repository.js";
 import type { AuthUser } from "../types/auth-user.js";
+import { parseBody } from "../validation/parse-body.js";
+import { OpenAuctionBodySchema } from "../validation/schemas.js";
 import { AccountAccessService } from "./account-access.service.js";
 import type { EventApiRow } from "./event.service.js";
-
-const SPECIALISATIONS: Specialisation[] = [
-  "NEW_MORTGAGE",
-  "REFINANCE",
-  "PERSONAL_LOAN",
-  "BUSINESS_LOAN",
-];
-
-function isSpecialisation(v: unknown): v is Specialisation {
-  return typeof v === "string" && SPECIALISATIONS.includes(v as Specialisation);
-}
 
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -43,16 +34,8 @@ export class AccountAuctionService {
     accountId: string,
     body: unknown
   ): Promise<{ auction: AuctionCreatedApi; event: EventApiRow }> {
-    let classification: Specialisation = "NEW_MORTGAGE";
-    if (body && typeof body === "object") {
-      const c = (body as Record<string, unknown>).classification;
-      if (c !== undefined) {
-        if (!isSpecialisation(c)) {
-          throw new HttpError(400, "Invalid classification", "invalid_body");
-        }
-        classification = c;
-      }
-    }
+    const parsed = parseBody(OpenAuctionBodySchema, body ?? {});
+    const classification: Specialisation = parsed.classification ?? "NEW_MORTGAGE";
 
     await this.accountAccess.assertManagerAdminCanAccessAccount(user, accountId);
 

@@ -53,10 +53,7 @@ export class EventService {
     return { event: this.toApi(row) };
   }
 
-  async listByAccount(user: AuthUser, accountId: string | undefined): Promise<{ events: EventApiRow[] }> {
-    if (typeof accountId !== "string" || !accountId) {
-      throw new HttpError(400, "accountId query parameter is required", "invalid_query");
-    }
+  async listByAccount(user: AuthUser, accountId: string): Promise<{ events: EventApiRow[] }> {
     await this.accountAccess.assertStaffCanAccessAccount(user, accountId);
     const rows = await this.repo.findByAccountId(accountId);
     return { events: rows.map((r) => this.toApi(r)) };

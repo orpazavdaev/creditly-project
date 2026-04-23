@@ -2,6 +2,8 @@ import { Prisma } from "@prisma/client";
 import type { EventBus } from "../event-bus/event-bus.js";
 import { publishEventCreated } from "../event-bus/publish-domain-event.js";
 import { HttpError } from "../utils/http-error.js";
+import { parseBody } from "../validation/parse-body.js";
+import { SubmitOfferBodySchema } from "../validation/schemas.js";
 import { eventTypeToApi } from "../utils/event-type-api.js";
 import { mapBankerSubmitOfferResponse, type BankerSubmitOfferResponse } from "../mappers/banker-responses.mapper.js";
 import { AuctionLifecycleRepository } from "../repositories/auction-lifecycle.repository.js";
@@ -66,14 +68,7 @@ export class AuctionOfferService {
     auctionId: string,
     body: unknown
   ): Promise<BankerSubmitOfferResponse> {
-    if (!body || typeof body !== "object") {
-      throw new HttpError(400, "Invalid body", "invalid_body");
-    }
-    const raw = (body as Record<string, unknown>).totalInterestRate;
-    if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) {
-      throw new HttpError(400, "totalInterestRate must be a positive number", "invalid_body");
-    }
-    const totalInterestRate = raw;
+    const { totalInterestRate } = parseBody(SubmitOfferBodySchema, body);
 
     const banker = await this.repo.findBankerForSubmit(userId);
     if (!banker || banker.role !== "BANKER") {

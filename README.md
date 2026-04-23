@@ -21,8 +21,8 @@ The backend follows a **layered** structure so HTTP, use cases, and persistence 
 
 - **`index.ts` / `app.ts`** — Process bootstrap: load env, register event-bus listeners once, create Express app, start jobs (for example refresh-token cleanup), listen on a port.
 - **`modules/`** — Route factories: mount paths, stack middleware (`authenticateJWT`, `requireRole` / `requireRoles`), delegate to controllers.
-- **`controllers/`** — Map HTTP (params, body, status codes) to service calls; validation of JSON bodies for auth and manual event creation uses **Zod** in services (`validation/schemas.ts`, `validation/parse-body.ts`).
-- **`services/`** — Use cases and orchestration (accounts, auctions, offers, events, auth, CRM stub, domain rules on events).
+- **`controllers/`** — Map HTTP to service calls; **path and query** inputs use **Zod** via **`parseParams`** / **`parseQuery`** where applicable (`validation/`).
+- **`services/`** — Use cases and orchestration; **Zod** validates inbound JSON bodies where the service owns the contract (auth, events, open auction, submit offer).
 - **`repositories/`** — Prisma access and query shapes; keeps SQL/ORM details out of services.
 - **`mappers/`** — API-facing DTOs (for example stripping fields for banker responses).
 - **`event-bus/`** — Lightweight **in-process** pub/sub (`EventBus`: `on` / `emit`). Used for reactions after a row is written, not as a replacement for HTTP.
@@ -174,7 +174,17 @@ This repository ships **`prisma/schema.prisma`** and uses **`prisma db push`** (
 
 ## Request validation (Zod)
 
-`POST /auth/login`, `POST /auth/register`, and `POST /events` use **Zod** schemas (`backend/src/validation/schemas.ts`) parsed through **`parseBody`** in **AuthService** and **EventService**. Invalid JSON shapes return **400** with code **`invalid_body`** (and a short message from the first schema issue). Other routes keep checks in their services to avoid a second DTO layer everywhere.
+`backend/src/validation/schemas.ts` defines payloads and path/query shapes. **`parseBody`**, **`parseParams`**, and **`parseQuery`** (`validation/parse-body.ts`) throw **`HttpError`** **400** with codes **`invalid_body`**, **`invalid_params`**, or **`invalid_query`** (first Zod issue message where helpful).
+
+| Surface | Schema / helper | Where it runs |
+| -------- | ----------------- | ------------- |
+| `POST /auth/login` | `LoginBodySchema` | `AuthService.login` |
+| `POST /auth/register` | `RegisterBodySchema` | `AuthService.register` |
+| `POST /events` | `EventCreateBodySchema` | `EventService.create` |
+| `GET /events?accountId=` | `EventsListQuerySchema` + `firstQueryString` | `EventController.list` |
+| `GET/POST …/:id…` (accounts, auctions) | `PathAccountIdSchema`, `PathAuctionIdSchema` | Account, auction, offer controllers |
+| `POST /accounts/:id/auctions` | `OpenAuctionBodySchema` (strict; optional `classification`) | `AccountAuctionService.createForAccount` |
+| `POST /auctions/:id/offers` | `SubmitOfferBodySchema` (`totalInterestRate` coerced number, finite, positive) | `AuctionOfferService.submitOffer` |
 
 ---
 
