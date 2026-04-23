@@ -53,11 +53,11 @@ export function createApp(
   const auctionLifecycleRepo = new AuctionLifecycleRepository();
   const accountRepo = new AccountRepository();
   const accountAccess = new AccountAccessService(accountRepo);
-  const accountListService = new AccountListService(accountRepo, accountAccess);
+  const accountListService = new AccountListService(accountRepo, accountAccess, auctionLifecycleRepo);
   const authRepository = new AuthRepository();
   const accountCreateService = new AccountCreateService(accountRepo, authRepository);
   const auctionBrowseRepository = new AuctionBrowseRepository();
-  const auctionBrowseService = new AuctionBrowseService(auctionBrowseRepository);
+  const auctionBrowseService = new AuctionBrowseService(auctionBrowseRepository, auctionLifecycleRepo);
   const app = express();
   app.use(requestContext);
   app.use(cookieParser());

@@ -12,6 +12,7 @@ import { AuctionOfferRepository } from "../repositories/auction-offer.repository
 import type { BankOfferApiRow } from "../types/bank-offer-api.js";
 import type { DomainEventBusinessService } from "./domain-event-business.service.js";
 import type { AuthUser } from "../types/auth-user.js";
+import { effectiveAuctionOpportunityStatus } from "../utils/auction-opportunity-status.js";
 
 export type AuctionSummaryApi = {
   id: string;
@@ -58,7 +59,7 @@ export class AuctionOfferService {
       auction: {
         id: auction.id,
         classification: auction.classification,
-        status: auction.status,
+        status: effectiveAuctionOpportunityStatus(auction.status, auction.expiresAt),
         expiresAt: auction.expiresAt.toISOString(),
         accountId: auction.accountId,
         openedAt: auction.openedAt.toISOString(),
@@ -101,7 +102,7 @@ export class AuctionOfferService {
       auction: {
         id: auction.id,
         classification: auction.classification,
-        status: auction.status,
+        status: effectiveAuctionOpportunityStatus(auction.status, auction.expiresAt),
         expiresAt: auction.expiresAt.toISOString(),
       },
       offers: offers.map((o) => ({

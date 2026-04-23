@@ -1,4 +1,5 @@
 import type { AdminAuctionBrowseRow } from "../repositories/auction-browse.repository.js";
+import { effectiveAuctionOpportunityStatus } from "../utils/auction-opportunity-status.js";
 
 export type AdminAuctionListItem = {
   id: string;
@@ -17,7 +18,7 @@ export function toAdminAuctionListItem(row: AdminAuctionBrowseRow): AdminAuction
     id: row.id,
     accountId: row.accountId,
     classification: row.classification,
-    status: row.status,
+    status: effectiveAuctionOpportunityStatus(row.status, row.expiresAt),
     openedAt: row.openedAt.toISOString(),
     expiresAt: row.expiresAt.toISOString(),
     closedAt: row.closedAt ? row.closedAt.toISOString() : null,

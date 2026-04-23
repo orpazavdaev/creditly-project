@@ -55,6 +55,7 @@ export class AuctionBrowseRepository {
       where: {
         classification: { in: classifications },
         status: "OPEN",
+        expiresAt: { gt: new Date() },
       },
       select: {
         id: true,

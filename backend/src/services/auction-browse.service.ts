@@ -1,15 +1,20 @@
 import { HttpError } from "../utils/http-error.js";
 import { AuctionBrowseRepository } from "../repositories/auction-browse.repository.js";
+import type { AuctionLifecycleRepository } from "../repositories/auction-lifecycle.repository.js";
 import { toAdminAuctionListItem, type AdminAuctionListItem } from "../mappers/admin-auction-list.mapper.js";
 import { toBankerAuctionListItem, type BankerAuctionListItem } from "../mappers/banker-auction-list.mapper.js";
 import type { AuthUser } from "../types/auth-user.js";
 
 export class AuctionBrowseService {
-  constructor(private readonly browseRepo: AuctionBrowseRepository) {}
+  constructor(
+    private readonly browseRepo: AuctionBrowseRepository,
+    private readonly lifecycleRepo: AuctionLifecycleRepository
+  ) {}
 
   async listForUser(
     user: AuthUser
   ): Promise<{ auctions: AdminAuctionListItem[] } | { auctions: BankerAuctionListItem[] }> {
+    await this.lifecycleRepo.expireAllOpenPastDueWithNoBids();
     if (user.role === "ADMIN") {
       const rows = await this.browseRepo.findAll();
       return { auctions: rows.map(toAdminAuctionListItem) };

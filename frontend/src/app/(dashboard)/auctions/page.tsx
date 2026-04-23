@@ -15,7 +15,13 @@ export default function AuctionsPage() {
     queryKey: user ? queryKeys.auctions(user.id) : ["auctions", "pending"],
     queryFn: () => apiFetch<{ auctions: BankerAuctionRow[] }>("/auctions"),
     enabled: Boolean(user),
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
+
+  const rows = q.data?.auctions ?? [];
 
   if (q.isLoading) {
     return (
@@ -34,8 +40,6 @@ export default function AuctionsPage() {
       </>
     );
   }
-
-  const rows = q.data?.auctions ?? [];
 
   return (
     <>

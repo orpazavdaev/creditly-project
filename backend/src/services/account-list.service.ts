@@ -8,11 +8,13 @@ import {
   type AccountStaffListItem,
 } from "../mappers/account-staff.mapper.js";
 import { AccountAccessService } from "./account-access.service.js";
+import type { AuctionLifecycleRepository } from "../repositories/auction-lifecycle.repository.js";
 
 export class AccountListService {
   constructor(
     private readonly accountRepo: AccountRepository,
-    private readonly accountAccess: AccountAccessService
+    private readonly accountAccess: AccountAccessService,
+    private readonly lifecycleRepo: AuctionLifecycleRepository
   ) {}
 
   async listForUser(user: AuthUser): Promise<{ accounts: AccountStaffListItem[] }> {
@@ -42,6 +44,14 @@ export class AccountListService {
     const row = await this.accountRepo.findStaffDetailById(accountId);
     if (!row) {
       throw new HttpError(404, "Account not found", "account_not_found");
+    }
+    if (row.auctionOpportunity) {
+      await this.lifecycleRepo.expireOpenIfPastDue(row.auctionOpportunity.id);
+      const updated = await this.accountRepo.findStaffDetailById(accountId);
+      if (!updated) {
+        throw new HttpError(404, "Account not found", "account_not_found");
+      }
+      return { account: toAccountStaffDetailItem(updated) };
     }
     return { account: toAccountStaffDetailItem(row) };
   }

@@ -33,6 +33,23 @@ export class AuctionLifecycleRepository {
     });
   }
 
+  expireAllOpenPastDueWithNoBids(): Promise<void> {
+    return prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const rows = await tx.auctionOpportunity.findMany({
+        where: { status: "OPEN", expiresAt: { lte: now } },
+        select: { id: true, _count: { select: { bankOffers: true } } },
+      });
+      for (const r of rows) {
+        if (r._count.bankOffers > 0) continue;
+        await tx.auctionOpportunity.update({
+          where: { id: r.id },
+          data: { status: "EXPIRED", closedAt: now, winningOfferId: null },
+        });
+      }
+    });
+  }
+
   findForClose(auctionId: string): Promise<AuctionCloseRow | null> {
     return prisma.auctionOpportunity.findUnique({
       where: { id: auctionId },

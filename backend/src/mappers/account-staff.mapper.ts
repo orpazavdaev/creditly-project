@@ -1,5 +1,6 @@
 import type { AccountStaffDetailRow, AccountStaffListRow } from "../repositories/account.repository.js";
 import { emailLocalPart } from "../utils/email-display.js";
+import { effectiveAuctionOpportunityStatus } from "../utils/auction-opportunity-status.js";
 
 export type AccountStaffListItem = {
   id: string;
@@ -50,24 +51,26 @@ export function toAccountStaffDetailItem(row: AccountStaffDetailRow): AccountSta
   const base = toAccountStaffListItem(row);
   const auc = row.auctionOpportunity;
   const now = new Date();
+  if (!auc) {
+    return { ...base, auction: null };
+  }
+  const displayStatus = effectiveAuctionOpportunityStatus(auc.status, auc.expiresAt, now);
   return {
     ...base,
-    auction: auc
-      ? {
-          id: auc.id,
-          status: auc.status,
-          openedAt: auc.openedAt.toISOString(),
-          expiresAt: auc.expiresAt.toISOString(),
-          closedAt: auc.closedAt ? auc.closedAt.toISOString() : null,
-          classification: auc.classification,
-          winningOffer: auc.winningOffer
-            ? {
-                totalInterestRate: auc.winningOffer.totalInterestRate,
-                bankName: auc.winningOffer.bank.name,
-              }
-            : null,
-          canCloseAuction: auc.status !== "CLOSED" && auc.expiresAt.getTime() <= now.getTime(),
-        }
-      : null,
+    auction: {
+      id: auc.id,
+      status: displayStatus,
+      openedAt: auc.openedAt.toISOString(),
+      expiresAt: auc.expiresAt.toISOString(),
+      closedAt: auc.closedAt ? auc.closedAt.toISOString() : null,
+      classification: auc.classification,
+      winningOffer: auc.winningOffer
+        ? {
+            totalInterestRate: auc.winningOffer.totalInterestRate,
+            bankName: auc.winningOffer.bank.name,
+          }
+        : null,
+      canCloseAuction: auc.status !== "CLOSED" && auc.expiresAt.getTime() <= now.getTime(),
+    },
   };
 }

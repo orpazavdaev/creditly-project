@@ -15,7 +15,13 @@ export default function StaffAuctionsPage() {
     queryKey: user ? queryKeys.auctions(user.id) : ["auctions", "pending"],
     queryFn: () => apiFetch<{ auctions: AdminAllAuctionRow[] }>("/auctions"),
     enabled: Boolean(user),
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
+
+  const rows = q.data?.auctions ?? [];
 
   if (q.isLoading) {
     return (
@@ -34,8 +40,6 @@ export default function StaffAuctionsPage() {
       </>
     );
   }
-
-  const rows = q.data?.auctions ?? [];
 
   return (
     <>

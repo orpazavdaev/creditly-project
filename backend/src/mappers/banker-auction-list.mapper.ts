@@ -1,4 +1,5 @@
 import type { AuctionBrowseRow } from "../repositories/auction-browse.repository.js";
+import { effectiveAuctionOpportunityStatus } from "../utils/auction-opportunity-status.js";
 
 export type BankerAuctionListItem = {
   id: string;
@@ -13,7 +14,7 @@ export function toBankerAuctionListItem(row: AuctionBrowseRow): BankerAuctionLis
   return {
     id: row.id,
     classification: row.classification,
-    status: row.status,
+    status: effectiveAuctionOpportunityStatus(row.status, row.expiresAt),
     openedAt: row.openedAt.toISOString(),
     expiresAt: row.expiresAt.toISOString(),
     closedAt: row.closedAt ? row.closedAt.toISOString() : null,
