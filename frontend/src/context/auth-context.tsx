@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ACCESS_TOKEN_KEY } from "@/lib/config";
+import { ACCESS_TOKEN_KEY, ACCESS_TOKEN_UPDATE_EVENT } from "@/lib/config";
 import { apiFetch, apiRefreshAccessToken, setStoredAccessToken } from "@/lib/api";
 import { decodeJwtPayload, isJwtExpired } from "@/lib/jwt";
 import type { UserRole } from "@/types/roles";
@@ -50,6 +50,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setAccessToken = useCallback((token: string | null) => {
     setStoredAccessToken(token);
     setAccessTokenState(token);
+  }, []);
+
+  useEffect(() => {
+    const onToken = (e: Event) => {
+      const d = (e as CustomEvent<{ accessToken: string | null }>).detail;
+      if (d && "accessToken" in d) {
+        setAccessTokenState(d.accessToken ?? null);
+      }
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener(ACCESS_TOKEN_UPDATE_EVENT, onToken);
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener(ACCESS_TOKEN_UPDATE_EVENT, onToken);
+      }
+    };
   }, []);
 
   useEffect(() => {
