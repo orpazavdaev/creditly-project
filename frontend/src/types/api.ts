@@ -1,4 +1,11 @@
-import type { UserRole } from "./roles";
+import type {
+  AccountStatus,
+  AuctionOpportunityStatus,
+  EventTypeApi,
+  Specialisation,
+  SyncStatus,
+  UserRole,
+} from "./domain";
 
 export type AccountListItem = {
   id: string;
@@ -6,10 +13,10 @@ export type AccountListItem = {
   costumerEmail: string;
   costumerPhone: string;
   costumerName: string;
-  status: string;
+  status: AccountStatus;
   lastActivity: string;
   isHighActivity: boolean;
-  syncStatus: string;
+  syncStatus: SyncStatus;
   failureReason: string | null;
   createdAt: string;
 };
@@ -17,11 +24,11 @@ export type AccountListItem = {
 export type AccountDetailItem = AccountListItem & {
   auction: {
     id: string;
-    status: string;
+    status: AuctionOpportunityStatus;
     openedAt: string;
     expiresAt: string;
     closedAt: string | null;
-    classification: string;
+    classification: Specialisation;
     winningOffer: { totalInterestRate: number; bankName: string } | null;
     canCloseAuction: boolean;
   } | null;
@@ -31,7 +38,7 @@ export type EventRow = {
   id: string;
   accountId: string;
   userId: string;
-  type: string;
+  type: EventTypeApi;
   createdAt: string;
   metadata: unknown;
   createdByLabel: string;
@@ -40,8 +47,8 @@ export type EventRow = {
 export type AdminAllAuctionRow = {
   id: string;
   accountId: string;
-  classification: string;
-  status: string;
+  classification: Specialisation;
+  status: AuctionOpportunityStatus;
   openedAt: string;
   expiresAt: string;
   closedAt: string | null;
@@ -50,8 +57,8 @@ export type AdminAllAuctionRow = {
 
 export type BankerAuctionRow = {
   id: string;
-  classification: string;
-  status: string;
+  classification: Specialisation;
+  status: AuctionOpportunityStatus;
   openedAt: string;
   expiresAt: string;
   closedAt: string | null;
@@ -60,8 +67,8 @@ export type BankerAuctionRow = {
 export type AuctionOffersResponse = {
   auction: {
     id: string;
-    classification: string;
-    status: string;
+    classification: Specialisation;
+    status: AuctionOpportunityStatus;
     expiresAt: string;
     accountId?: string;
     openedAt?: string;

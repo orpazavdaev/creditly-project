@@ -6,18 +6,16 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/context/auth-context";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { isBankerRole } from "@/types/roles";
-import type { UserRole } from "@/types/roles";
 import type { RegisterBody } from "@/types/api";
+import { USER_ROLE_VALUES, type UserRole } from "@/types/domain";
 import styles from "@/app/ui.module.css";
-
-const ROLES: UserRole[] = ["ADMIN", "MANAGER", "USER", "BANKER"];
 
 export default function RegisterPage() {
   const { ready, user } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<UserRole>("MANAGER");
+  const [role, setRole] = useState<UserRole>(USER_ROLE_VALUES[1]);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [done, setDone] = useState(false);
@@ -91,7 +89,7 @@ export default function RegisterPage() {
                 value={role}
                 onChange={(e) => setRole(e.target.value as UserRole)}
               >
-                {ROLES.map((r) => (
+                {USER_ROLE_VALUES.map((r) => (
                   <option key={r} value={r}>
                     {r}
                   </option>

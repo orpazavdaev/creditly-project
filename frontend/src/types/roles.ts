@@ -1,4 +1,4 @@
-export type UserRole = "ADMIN" | "MANAGER" | "USER" | "BANKER";
+export type { UserRole } from "./domain";
 
 export function isStaffRole(role: string): role is "ADMIN" | "MANAGER" | "USER" {
   return role === "ADMIN" || role === "MANAGER" || role === "USER";

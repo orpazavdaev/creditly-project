@@ -7,6 +7,7 @@ import { useState } from "react";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import type { AccountDetailItem } from "@/types/api";
+import { SPECIALISATION_VALUES, type Specialisation } from "@/types/domain";
 import {
   canManageAuctionForAccount,
   canOpenAuction,
@@ -14,20 +15,13 @@ import {
 import { useAuth } from "@/context/auth-context";
 import styles from "@/app/ui.module.css";
 
-const CLASSIFICATIONS = [
-  "NEW_MORTGAGE",
-  "REFINANCE",
-  "PERSONAL_LOAN",
-  "BUSINESS_LOAN",
-] as const;
-
 export default function AccountDetailPage() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
   const router = useRouter();
   const qc = useQueryClient();
   const { user } = useAuth();
-  const [classification, setClassification] = useState<string>("NEW_MORTGAGE");
+  const [classification, setClassification] = useState<Specialisation>(SPECIALISATION_VALUES[0]);
 
   const q = useQuery({
     queryKey: user ? queryKeys.account(user.id, id) : ["account", id, "pending"],
@@ -161,9 +155,9 @@ export default function AccountDetailPage() {
                 className={styles.input}
                 style={{ width: "auto", minWidth: "11rem" }}
                 value={classification}
-                onChange={(e) => setClassification(e.target.value)}
+                onChange={(e) => setClassification(e.target.value as Specialisation)}
               >
-                {CLASSIFICATIONS.map((c) => (
+                {SPECIALISATION_VALUES.map((c) => (
                   <option key={c} value={c}>
                     {c.replace(/_/g, " ")}
                   </option>
