@@ -10,7 +10,7 @@ export function registerCrmWinningOfferListener(
   bus.on(topic, (payload: WinningOfferSelectedPayload) => {
     void crm.handleWinningOfferSelected(payload).catch((err) => {
       const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`[crm] winning offer sync unexpected: ${msg}\n`);
+      console.error("[crm] winning offer sync unexpected", msg);
     });
   });
 }

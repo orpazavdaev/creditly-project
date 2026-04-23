@@ -27,7 +27,7 @@ The backend follows a **layered** structure so HTTP, use cases, and persistence 
 - **`mappers/`** — API-facing DTOs (for example stripping fields for banker responses).
 - **`event-bus/`** — Lightweight **in-process** pub/sub (`EventBus`: `on` / `emit`). Used for reactions after a row is written, not as a replacement for HTTP.
 - **`middleware/`** — Auth, errors, request context.
-- **Outbound integrations** — `src/integration/crm-mock.ts` holds the **mock CRM** outbound call (random failure). `CrmService` orchestrates persistence of sync results and calls that mock from the event pipeline, not from HTTP controllers.
+- **Outbound integrations** — `src/integration/crm-mock.ts` defines **`CrmOutboundClient`** (contract) and **`CrmMockOutbound`** (simulated HTTP with configurable failure rate). **`CrmService`** depends on that interface only; **`registerEventBusListeners`** wires the mock. No controller imports the integration layer directly.
 - **`jobs/`** — Scheduled in-process tasks.
 
 The frontend uses the **App Router**, **React Query** for server state, a shared **`apiFetch`** helper, and **`AuthProvider`** for access tokens plus refresh via cookies.
@@ -138,9 +138,41 @@ Two related concepts coexist:
 - **`event.created`** — **`CrmService.handleAfterDomainEvent`** for **`DOCUMENT_UPLOADED`**, **`STATUS_CHANGED`**, and **`AUCTION_OPENED`** only (other types no-op). Failures set **`syncStatus`** / **`failureReason`** on the account.
 - **`winning.offer.selected`** — **`CrmService.handleWinningOfferSelected`** after a winning offer is recorded.
 
-**CRM** in this repo is a **mock** with random failures to exercise **`Account.syncStatus`** / **`failureReason`**.
-
 **Trade-off:** handlers run **after** the HTTP response path has committed the primary write; failures in subscribers are logged but do not roll back the `Event` row. See Assumptions and trade-offs.
+
+---
+
+## CRM outbound integration (mock)
+
+**Layers**
+
+- **`CrmOutboundClient`** (`integration/crm-mock.ts`) — Small interface: **`push(accountId, ctx)`** returns a **`Promise`**. A real deployment would swap **`CrmMockOutbound`** for an HTTP client (Salesforce, HubSpot, internal CRM API) without changing **`CrmService`**.
+- **`CrmMockOutbound`** — Async **`push`** (yields on **`Promise.resolve()`** then may throw). Failure probability comes from **`CRM_FAILURE_RATE`** (see **`backend/.env.example`**; default **0.35** when unset). **`CrmService`** does not read that env var; only the mock does.
+- **`CrmService`** — Application orchestration: filters domain events with **`TRIGGER_EVENTS`**, builds a **`ctx`** string for logs and error messages, calls **`crmClient.push`**, then **`AccountSyncRepository`** **`markSuccess`** / **`markFailed`**. Shared **`syncAccount`** implements one try/catch path so success and failure handling are not duplicated.
+- **Event bus** — Listeners invoke **`CrmService`** only; they never call **`CrmMockOutbound`** directly.
+
+**Flow (high level)**
+
+```mermaid
+flowchart LR
+  subgraph persist["Persist + publish"]
+    E[Event row]
+    EB[EventBus emit]
+  end
+  subgraph crm["CRM side effects"]
+    L[Listener]
+    S[CrmService]
+    C[CrmOutboundClient]
+    R[AccountSyncRepository]
+  end
+  E --> EB
+  EB --> L
+  L --> S
+  S --> C
+  S --> R
+```
+
+For **`winning.offer.selected`**, the same **`syncAccount`** path runs with **`ctx`** in the form **`winning_offer_selected:`** plus the winning offer id.
 
 ---
 
@@ -202,7 +234,7 @@ This repository ships **`prisma/schema.prisma`** and uses **`prisma db push`** (
 - **Lazy auction expiration** — Some paths explicitly expire overdue auctions before reads/writes; there is no separate cron closing every auction at the exact second of `expiresAt`.
 - **CRM** — Simulated random failures only; no real outbound integration or retry budget.
 - **Document upload / notes** — Events can represent uploads and notes; there is no separate blob store or note table in this slice.
-- **Error responses** — Non-HTTP errors are mapped to generic **500** responses so Prisma or stack traces are not leaked to clients (details stay in logs / stderr where applicable).
+- **Error responses** — Non-HTTP errors are mapped to generic **500** responses so Prisma or stack traces are not leaked to clients (details stay in server logs where applicable).
 - **Monolith process** — API, listeners, and cleanup job share one Node process; horizontal scaling would require externalizing sessions, bus, and jobs.
 
 ---
@@ -262,7 +294,7 @@ The backend ships a **Vitest** suite (`cd backend && npm run test`). Tests are *
 - **Banker data minimization** — Offer responses must not leak `accountId` or customer identifiers to the banker client; a mapper test locks that contract.
 - **Auction rules** — Submitting offers on non-open or expired auctions must fail with stable error codes; this protects integrity and matches UI expectations.
 - **Domain reactions on events** — `DOCUMENT_UPLOADED` transitions **`NEW` → `READY_FOR_AUCTION`**, high-activity counts use a 24-hour window, and winner selection uses lowest rate then earliest offer; these are central business rules.
-- **Event-driven CRM** — The mock CRM is invoked from **`CrmService`** paths triggered by domain payloads; tests assert success updates sync state and failures persist **`FAILED`** plus **`failureReason`**, and that CRM is not invoked for unrelated event types.
+- **Event-driven CRM** — **`CrmService`** is tested with an injected **`{ push }`** stub (no real mock module); assertions cover success sync, failure persistence, unrelated event types, and the winning-offer path.
 
 Together, the suite favors **short, readable tests** on **high-risk paths** rather than blanket coverage of every controller line.
 
@@ -271,3 +303,5 @@ Together, the suite favors **short, readable tests** on **high-risk paths** rath
 ## Environment
 
 Secrets and deployment-specific values live in **`.env`** files, not in git. Copy **`backend/.env.example`** and **`frontend/.env.example`** and adjust for your machine or deployment.
+
+Backend-only: **`CRM_FAILURE_RATE`** (0–1) tunes how often **`CrmMockOutbound.push`** throws in development; omit to use the default **0.35**.

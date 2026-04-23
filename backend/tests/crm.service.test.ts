@@ -1,17 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-
-vi.mock("../src/integration/crm-mock.js", () => ({
-  crmPushMock: vi.fn().mockResolvedValue(undefined),
-}));
-
-import { crmPushMock } from "../src/integration/crm-mock.js";
 import { CrmService } from "../src/services/crm.service.js";
 import type { AccountSyncRepository } from "../src/repositories/account-sync.repository.js";
 
 describe("CrmService", () => {
+  let push: ReturnType<typeof vi.fn>;
+
   beforeEach(() => {
-    vi.mocked(crmPushMock).mockClear();
-    vi.mocked(crmPushMock).mockResolvedValue(undefined);
+    push = vi.fn().mockResolvedValue(undefined);
   });
 
   it("pushes CRM for DOCUMENT_UPLOADED and marks success", async () => {
@@ -19,7 +14,7 @@ describe("CrmService", () => {
       markSuccess: vi.fn().mockResolvedValue(undefined),
       markFailed: vi.fn().mockResolvedValue(undefined),
     } as unknown as AccountSyncRepository;
-    const svc = new CrmService(sync);
+    const svc = new CrmService(sync, { push });
 
     await svc.handleAfterDomainEvent({
       id: "e1",
@@ -31,17 +26,17 @@ describe("CrmService", () => {
       metadata: {},
     });
 
-    expect(crmPushMock).toHaveBeenCalledWith("acc1", "event:document_uploaded");
+    expect(push).toHaveBeenCalledWith("acc1", "event:DOCUMENT_UPLOADED");
     expect(sync.markSuccess).toHaveBeenCalledWith("acc1");
     expect(sync.markFailed).not.toHaveBeenCalled();
   });
 
-  it("does not call CRM mock for AUCTION_CLOSED (winner path uses winning_offer_selected)", async () => {
+  it("does not call CRM client for AUCTION_CLOSED (winner path uses winning_offer_selected)", async () => {
     const sync = {
       markSuccess: vi.fn().mockResolvedValue(undefined),
       markFailed: vi.fn().mockResolvedValue(undefined),
     } as unknown as AccountSyncRepository;
-    const svc = new CrmService(sync);
+    const svc = new CrmService(sync, { push });
 
     await svc.handleAfterDomainEvent({
       id: "e2",
@@ -53,17 +48,17 @@ describe("CrmService", () => {
       metadata: {},
     });
 
-    expect(crmPushMock).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
     expect(sync.markSuccess).not.toHaveBeenCalled();
   });
 
-  it("persists failure when CRM mock rejects", async () => {
-    vi.mocked(crmPushMock).mockRejectedValueOnce(new Error("CRM down"));
+  it("persists failure when CRM client rejects", async () => {
+    push.mockRejectedValueOnce(new Error("CRM down"));
     const sync = {
       markSuccess: vi.fn().mockResolvedValue(undefined),
       markFailed: vi.fn().mockResolvedValue(undefined),
     } as unknown as AccountSyncRepository;
-    const svc = new CrmService(sync);
+    const svc = new CrmService(sync, { push });
 
     await svc.handleAfterDomainEvent({
       id: "e3",
@@ -76,5 +71,22 @@ describe("CrmService", () => {
     });
 
     expect(sync.markFailed).toHaveBeenCalledWith("acc2", "CRM down");
+  });
+
+  it("syncs winning offer via same path as domain events", async () => {
+    const sync = {
+      markSuccess: vi.fn().mockResolvedValue(undefined),
+      markFailed: vi.fn().mockResolvedValue(undefined),
+    } as unknown as AccountSyncRepository;
+    const svc = new CrmService(sync, { push });
+
+    await svc.handleWinningOfferSelected({
+      accountId: "acc9",
+      offerId: "offer1",
+      auctionId: "auc1",
+    });
+
+    expect(push).toHaveBeenCalledWith("acc9", "winning_offer_selected:offer1");
+    expect(sync.markSuccess).toHaveBeenCalledWith("acc9");
   });
 });

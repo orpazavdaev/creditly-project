@@ -9,7 +9,7 @@ export function registerDomainEventCreatedPipeline(bus: EventBus, crm: CrmServic
         await crm.handleAfterDomainEvent(payload);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`[crm] unexpected: ${msg}\n`);
+        console.error("[crm] unexpected", msg);
       }
     })();
   });
