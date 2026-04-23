@@ -1,4 +1,9 @@
 import type { DomainEventCreatedPayload } from "../event-bus/domain-events.js";
+import { appEventBus } from "../event-bus/app-event-bus.js";
+import {
+  WINNING_OFFER_SELECTED_TOPIC,
+  type WinningOfferSelectedPayload,
+} from "../event-bus/crm-integration-events.js";
 import { prisma } from "../repositories/prisma.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -70,5 +75,11 @@ export async function applyBusinessRulesOnEventCreated(
         data: { status: "WON" },
       }),
     ]);
+    const winningPayload: WinningOfferSelectedPayload = {
+      accountId,
+      auctionId: auction.id,
+      offerId: best.id,
+    };
+    appEventBus.emit(WINNING_OFFER_SELECTED_TOPIC, winningPayload);
   }
 }

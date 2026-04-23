@@ -1,7 +1,16 @@
-import type { DomainEventCreatedPayload } from "../domain-events.js";
+import type { EventBus } from "../event-bus.js";
+import type { CrmService } from "../../services/crm.service.js";
+import type { WinningOfferSelectedPayload } from "../crm-integration-events.js";
 
-export function onDomainEventCreatedCrm(payload: DomainEventCreatedPayload): void {
-  process.stdout.write(
-    `[crm] enqueue sync account=${payload.accountId} type=${payload.typeApi} eventId=${payload.id}\n`
-  );
+export function registerCrmWinningOfferListener(
+  bus: EventBus,
+  topic: string,
+  crm: CrmService
+): void {
+  bus.on(topic, (payload: WinningOfferSelectedPayload) => {
+    void crm.handleWinningOfferSelected(payload).catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`[crm] winning offer sync unexpected: ${msg}\n`);
+    });
+  });
 }

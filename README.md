@@ -164,10 +164,23 @@ After an **`Event`** row is persisted, **`EventService`** publishes **`event.cre
 
 **Why event-driven here:** HTTP stays thin (validate → write → respond) while **follow-up work** runs through subscribers without growing **`EventService`** with every downstream rule. The HTTP handler returns after the row exists; reactions can evolve independently (CRM stub today, real HTTP later).
 
-**Where it is wired:** **`registerEventBusListeners`** runs once at process startup in **`index.ts`** (before `createApp`) and attaches:
+**Where it is wired:** **`registerEventBusListeners`** runs once at process startup in **`index.ts`** (before `createApp`) and registers:
 
-- **`event-bus/listeners/business-logic.listener.ts`** — entry point only: it **`void`**-starts **`applyBusinessRulesOnEventCreated`** from **`services/domain-event-business.service.ts`** and logs async failures to **stderr**. That pattern keeps **`emit`** synchronous (no change to **`EventBus`**) while Prisma work runs **after** the request transaction conceptually, without blocking the response.
-- **`event-bus/listeners/crm-integration.listener.ts`** — still a **stdout stub** for future outbound CRM.
+- **`event-bus/listeners/domain-event-pipeline.listener.ts`** — single subscriber for **`event.created`**. It **`await`s `applyBusinessRulesOnEventCreated` first, then `CrmService.handleAfterDomainEvent`**, so **account row updates** from business rules and CRM **`syncStatus` / `failureReason`** do not race each other on the same HTTP-triggered event. Each step logs failures to **stderr**; **`emit`** stays synchronous while work runs in an async IIFE.
+- **`event-bus/listeners/crm-integration.listener.ts`** — subscribes to the internal topic **`winning.offer.selected`** (see below) and calls **`CrmService.handleWinningOfferSelected`**.
+
+### CRM integration (mock)
+
+**`services/crm.service.ts`** is a **mock** outbound CRM: **`pushMock`** randomly “fails” (~35%) so you can exercise **`Account.syncStatus`** and **`Account.failureReason`** without a real vendor. **Controllers never call it**; only **event-bus listeners** do, so HTTP stays decoupled from integration concerns.
+
+**Triggers:**
+
+- **`document_uploaded`**, **`status_changed`**, **`auction_opened`** — handled inside **`handleAfterDomainEvent`**, which runs from the **pipeline** after business rules on the same **`event.created`** payload.
+- **`winning_offer_selected`** — there is no separate Prisma **`Event`** row for this today. When **`auction_closed`** business logic picks a **winning `BankOffer`**, **`domain-event-business.service.ts`** emits **`winning.offer.selected`** on **`appEventBus`** with **`{ accountId, auctionId, offerId }`**. **`CrmService.handleWinningOfferSelected`** runs from the **CRM winning listener**, keeping the “something important happened” signal next to the code that already knows the winner.
+
+**On success:** **`syncStatus` → `SUCCESS`**, **`failureReason` → null**. **On mock failure:** **`syncStatus` → `FAILED`**, **`failureReason`** set to the error message (truncated). If persisting that failure throws, the service writes to **stderr** so the process does not crash.
+
+**Why this shape:** one **`CrmService`** centralizes CRM policy and Prisma side effects; listeners stay thin; **pipeline serializes** business vs CRM for **`event.created`**; **internal bus topic** avoids inventing fake HTTP events or re-entering **`event.created`** (which would re-run business rules) when the winner is chosen inside **`domain-event-business`**.
 
 **Business rules (in `domain-event-business.service.ts`):** all run **after** the new `Event` row is visible, so counts and reads include the event that triggered them.
 
@@ -175,7 +188,7 @@ After an **`Event`** row is persisted, **`EventService`** publishes **`event.cre
 2. **High activity** — Counts **`Event`** rows for that **`accountId`** with **`createdAt` ≥ now − 24h**; if **count > 3**, sets **`Account.isHighActivity`** to **`true`**, otherwise **`false`**. Runs on **every** domain event so the flag tracks the rolling window.
 3. **`auction_closed`** — Loads **`AuctionOpportunity`** by **`accountId`** (1:1). If none, returns. Loads **`bankOffers`** ordered by **`totalInterestRate` ascending**, then **`createdAt` ascending**, so **equal rate → earliest submitted offer wins**. **No offers:** **`AuctionOpportunity.status` → `EXPIRED`**, **`closedAt` set**, **`winningOfferId` cleared** (no **`Account`** status change). **At least one offer:** **`status` → `CLOSED`**, **`winningOfferId`** set to the chosen offer, and **`Account.status` → `WON`** in the same transaction as the auction update.
 
-**Why a service file instead of only the listener:** listeners stay tiny and testable; **`services/domain-event-business.service.ts`** holds Prisma and rule text in one place so you can unit-test rules or swap the listener transport later without duplicating logic.
+**Why dedicated service modules:** **`services/domain-event-business.service.ts`** holds account/auction **rules**; **`services/crm.service.ts`** holds **CRM sync + `Account` sync fields** only. Listeners orchestrate **when** those run, not **how** they update the database, which keeps tests and future real CRM clients manageable.
 
 **Why no queue yet:** everything runs **in-process** on the same Node thread. **`EventBus.emit`** wraps each **sync** handler in **`try/catch`**; async business work uses **`.catch`** on the returned promise so failures do not reject inside **`emit`**.
 

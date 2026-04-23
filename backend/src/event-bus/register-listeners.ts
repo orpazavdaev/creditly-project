@@ -1,9 +1,11 @@
 import type { EventBus } from "./event-bus.js";
-import { DOMAIN_EVENT_CREATED } from "./domain-events.js";
-import { onDomainEventCreatedBusiness } from "./listeners/business-logic.listener.js";
-import { onDomainEventCreatedCrm } from "./listeners/crm-integration.listener.js";
+import { WINNING_OFFER_SELECTED_TOPIC } from "./crm-integration-events.js";
+import { registerCrmWinningOfferListener } from "./listeners/crm-integration.listener.js";
+import { registerDomainEventCreatedPipeline } from "./listeners/domain-event-pipeline.listener.js";
+import { CrmService } from "../services/crm.service.js";
 
 export function registerEventBusListeners(bus: EventBus): void {
-  bus.on(DOMAIN_EVENT_CREATED, onDomainEventCreatedBusiness);
-  bus.on(DOMAIN_EVENT_CREATED, onDomainEventCreatedCrm);
+  const crm = new CrmService();
+  registerDomainEventCreatedPipeline(bus, crm);
+  registerCrmWinningOfferListener(bus, WINNING_OFFER_SELECTED_TOPIC, crm);
 }
