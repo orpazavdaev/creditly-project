@@ -3,7 +3,7 @@ import type { EventBus } from "../event-bus/event-bus.js";
 import { publishEventCreated } from "../event-bus/publish-domain-event.js";
 import { HttpError } from "../utils/http-error.js";
 import { eventTypeToApi } from "../utils/event-type-api.js";
-import { prisma } from "../repositories/prisma.js";
+import { AccountAuctionRepository } from "../repositories/account-auction.repository.js";
 import type { EventApiRow } from "./event.service.js";
 
 const SPECIALISATIONS: Specialisation[] = [
@@ -30,7 +30,10 @@ export type AuctionCreatedApi = {
 };
 
 export class AccountAuctionService {
-  constructor(private readonly bus: EventBus) {}
+  constructor(
+    private readonly repo: AccountAuctionRepository,
+    private readonly bus: EventBus
+  ) {}
 
   async createForAccount(
     userId: string,
@@ -48,10 +51,7 @@ export class AccountAuctionService {
       }
     }
 
-    const account = await prisma.account.findUnique({
-      where: { id: accountId },
-      include: { auctionOpportunity: { select: { id: true } } },
-    });
+    const account = await this.repo.findAccountForAuctionCreate(accountId);
     if (!account) {
       throw new HttpError(404, "Account not found", "account_not_found");
     }
@@ -66,26 +66,12 @@ export class AccountAuctionService {
     const expiresAt = new Date(Date.now() + THREE_DAYS_MS);
 
     try {
-      const { auction, eventRow } = await prisma.$transaction(async (tx) => {
-        const a = await tx.auctionOpportunity.create({
-          data: {
-            accountId,
-            classification,
-            status: "OPEN",
-            openedBy: userId,
-            openedAt,
-            expiresAt,
-          },
-        });
-        const e = await tx.event.create({
-          data: {
-            accountId,
-            userId,
-            type: "AUCTION_OPENED",
-            metadata: { auctionId: a.id },
-          },
-        });
-        return { auction: a, eventRow: e };
+      const { auction, eventRow } = await this.repo.createAuctionAndOpenedEvent({
+        accountId,
+        userId,
+        classification,
+        openedAt,
+        expiresAt,
       });
 
       publishEventCreated(this.bus, eventRow);

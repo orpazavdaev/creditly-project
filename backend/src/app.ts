@@ -6,6 +6,7 @@ import { appEventBus } from "./event-bus/app-event-bus.js";
 import type { AppEnv } from "./types/env.js";
 import { AccountController } from "./controllers/account.controller.js";
 import { AuctionController } from "./controllers/auction.controller.js";
+import { AuctionOfferController } from "./controllers/auction-offer.controller.js";
 import { AuthController } from "./controllers/auth.controller.js";
 import { BankOfferController } from "./controllers/bank-offer.controller.js";
 import { EventController } from "./controllers/event.controller.js";
@@ -13,7 +14,10 @@ import { HealthController } from "./controllers/health.controller.js";
 import { AuthRepository } from "./repositories/auth.repository.js";
 import { EventRepository } from "./repositories/event.repository.js";
 import { HealthRepository } from "./repositories/health.repository.js";
+import { AccountAuctionRepository } from "./repositories/account-auction.repository.js";
+import { AuctionOfferRepository } from "./repositories/auction-offer.repository.js";
 import { AccountAuctionService } from "./services/account-auction.service.js";
+import { AuctionOfferService } from "./services/auction-offer.service.js";
 import { AuthService } from "./services/auth.service.js";
 import { EventService } from "./services/event.service.js";
 import { HealthService } from "./services/health.service.js";
@@ -50,11 +54,21 @@ export function createApp(env: AppEnv, eventBus: EventBus = appEventBus): expres
   app.use("/health", createHealthRouter(healthController));
   app.use("/auth", createAuthRouter(authController));
 
-  app.use("/auctions", createAuctionRouter(env, new AuctionController()));
+  app.use(
+    "/auctions",
+    createAuctionRouter(
+      env,
+      new AuctionController(),
+      new AuctionOfferController(new AuctionOfferService(new AuctionOfferRepository(), eventBus))
+    )
+  );
   app.use("/bank-offers", createBankOfferRouter(env, new BankOfferController()));
   app.use(
     "/accounts",
-    createAccountRouter(env, new AccountController(new AccountAuctionService(eventBus)))
+    createAccountRouter(
+      env,
+      new AccountController(new AccountAuctionService(new AccountAuctionRepository(), eventBus))
+    )
   );
   app.use(
     "/events",
