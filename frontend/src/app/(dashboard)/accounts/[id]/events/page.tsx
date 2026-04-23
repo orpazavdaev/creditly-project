@@ -31,7 +31,7 @@ export default function AccountEventsPage() {
     queryKey: user ? queryKeys.events(user.id, id) : ["events", id, "pending"],
     queryFn: () =>
       apiFetch<{ events: EventRow[] }>(`/events?accountId=${encodeURIComponent(id)}`),
-    enabled: Boolean(id && user && accountQ.data?.account),
+    enabled: Boolean(id && user && accountQ.isSuccess && Boolean(accountQ.data?.account)),
   });
 
   const addNote = useMutation({
@@ -149,7 +149,7 @@ export default function AccountEventsPage() {
           Document upload and notes can be added by administrators or assigned users only.
         </p>
       )}
-      {eventsQ.isPending && <p className={styles.muted}>Loading events…</p>}
+      {eventsQ.isLoading && <p className={styles.muted}>Loading events…</p>}
       {eventsQ.isError && (
         <div className={styles.errorBox}>
           {eventsQ.error instanceof Error ? eventsQ.error.message : "Failed to load events"}

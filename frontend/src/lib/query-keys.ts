@@ -6,5 +6,4 @@ export const queryKeys = {
   events: (userId: string, accountId: string) => ["events", API_BASE, accountId, userId] as const,
   auctions: (userId: string) => ["auctions", API_BASE, userId] as const,
   auctionOffers: (userId: string, auctionId: string) => ["auctionOffers", API_BASE, auctionId, userId] as const,
-  staffAuctionsAll: (userId: string) => ["staffAuctions", "all", API_BASE, userId] as const,
 };

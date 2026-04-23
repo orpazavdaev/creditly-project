@@ -16,7 +16,7 @@ export default function AuctionsPage() {
     enabled: Boolean(user),
   });
 
-  if (q.isPending) {
+  if (q.isLoading) {
     return (
       <>
         <h1 className={styles.pageTitle}>Auctions</h1>

@@ -53,7 +53,7 @@ export default function AuctionOfferPage() {
     return <p className={styles.muted}>Invalid auction.</p>;
   }
 
-  if (q.isPending) {
+  if (q.isLoading) {
     return <p className={styles.muted}>Loading auction…</p>;
   }
 

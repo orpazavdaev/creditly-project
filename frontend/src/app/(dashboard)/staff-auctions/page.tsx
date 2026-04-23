@@ -11,12 +11,12 @@ import styles from "@/app/ui.module.css";
 export default function StaffAuctionsPage() {
   const { user } = useAuth();
   const q = useQuery({
-    queryKey: user ? queryKeys.staffAuctionsAll(user.id) : ["staffAuctions", "pending"],
+    queryKey: user ? queryKeys.auctions(user.id) : ["auctions", "pending"],
     queryFn: () => apiFetch<{ auctions: AdminAllAuctionRow[] }>("/auctions"),
     enabled: Boolean(user),
   });
 
-  if (q.isPending) {
+  if (q.isLoading) {
     return (
       <>
         <h1 className={styles.pageTitle}>All auctions</h1>

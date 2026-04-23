@@ -50,9 +50,7 @@ export default function AccountDetailPage() {
       if (!user) return;
       void qc.invalidateQueries({ queryKey: queryKeys.accounts(user.id) });
       void qc.invalidateQueries({ queryKey: queryKeys.account(user.id, id) });
-      if (user.role === "ADMIN") {
-        void qc.invalidateQueries({ queryKey: queryKeys.staffAuctionsAll(user.id) });
-      }
+      void qc.invalidateQueries({ queryKey: queryKeys.auctions(user.id) });
     },
   });
 
@@ -65,9 +63,7 @@ export default function AccountDetailPage() {
       if (!user) return;
       void qc.invalidateQueries({ queryKey: queryKeys.accounts(user.id) });
       void qc.invalidateQueries({ queryKey: queryKeys.account(user.id, id) });
-      if (user.role === "ADMIN") {
-        void qc.invalidateQueries({ queryKey: queryKeys.staffAuctionsAll(user.id) });
-      }
+      void qc.invalidateQueries({ queryKey: queryKeys.auctions(user.id) });
     },
   });
 
@@ -83,7 +79,7 @@ export default function AccountDetailPage() {
   const showCloseAuction =
     Boolean(user && account?.auction && account.auction.canCloseAuction) && canManageAuction;
 
-  if (q.isPending) {
+  if (q.isLoading) {
     return <p className={styles.muted}>Loading…</p>;
   }
 
