@@ -6,15 +6,19 @@ import { AccountController } from "./controllers/account.controller.js";
 import { AuctionController } from "./controllers/auction.controller.js";
 import { AuthController } from "./controllers/auth.controller.js";
 import { BankOfferController } from "./controllers/bank-offer.controller.js";
+import { EventController } from "./controllers/event.controller.js";
 import { HealthController } from "./controllers/health.controller.js";
 import { AuthRepository } from "./repositories/auth.repository.js";
+import { EventRepository } from "./repositories/event.repository.js";
 import { HealthRepository } from "./repositories/health.repository.js";
 import { AuthService } from "./services/auth.service.js";
+import { EventService } from "./services/event.service.js";
 import { HealthService } from "./services/health.service.js";
 import { createAccountRouter } from "./modules/account/account.routes.js";
 import { createAuctionRouter } from "./modules/auction/auction.routes.js";
 import { createAuthRouter } from "./modules/auth/auth.routes.js";
 import { createBankOfferRouter } from "./modules/bank-offer/bank-offer.routes.js";
+import { createEventRouter } from "./modules/events/event.routes.js";
 import { createHealthRouter } from "./modules/health/health.routes.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { notFound } from "./middleware/not-found.js";
@@ -46,6 +50,7 @@ export function createApp(env: AppEnv): express.Express {
   app.use("/auctions", createAuctionRouter(env, new AuctionController()));
   app.use("/bank-offers", createBankOfferRouter(env, new BankOfferController()));
   app.use("/accounts", createAccountRouter(env, new AccountController()));
+  app.use("/events", createEventRouter(env, new EventController(new EventService(new EventRepository()))));
 
   app.use(notFound);
   app.use(errorHandler);

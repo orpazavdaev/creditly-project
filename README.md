@@ -131,6 +131,33 @@ Protected routes use middleware **in order**: **`authenticateJWT`** first (valid
 | `POST` | `/bank-offers` | `BANKER` only | Admins may submit offers too (`ADMIN` bypass). |
 | `GET` | `/accounts` | `MANAGER` or `USER` | **`BANKER` is not allowed** on account routes by design (bank staff use offers, not the shared accounts list in this policy). Admins may list accounts (`ADMIN` bypass). |
 
+## Events (backend + frontend)
+
+Domain **events** are rows in the Prisma **`Event`** model: they tie an **`accountId`**, a **`userId`** (who triggered the activity), a **`type`**, **`metadata`** (JSON), and **`createdAt`**. They are intended as an **audit / activity timeline** for an account, not as a generic message bus (that remains separate under `event-bus/` if you use it).
+
+### Backend: what was added
+
+- **Routes** — `modules/events/event.routes.ts`, mounted at **`/events`** in `app.ts`.
+- **`POST /events`** — Requires **`authenticateJWT`** (`Authorization: Bearer`). Body: **`accountId`** (string), **`type`** (string in **snake_case**), optional **`metadata`** (object; defaults to `{}`). The service checks that the **account exists** (`404` if not), maps **`type`** to the Prisma **`EventType`** enum, and persists **`userId`** from **`req.user.id`** (the JWT subject), not from the body, so callers cannot forge another user’s identity.
+- **`GET /events?accountId=`** — Same auth middleware. **Requires** the **`accountId`** query string; returns **`404`** if the account does not exist. Response is **`{ events: [...] }`**, ordered **newest first**. Each event includes **`type` in snake_case** again for API consistency.
+- **Type mapping** — `utils/event-type-api.ts` maps API strings to Prisma and back. Allowed **`type`** values: `document_uploaded`, `note_added`, `status_changed`, `auction_opened`, `offer_submitted`, `auction_closed`. Invalid or unknown types yield **`400`**.
+- **Layers** — `EventRepository` (Prisma `findMany` / `create` / account existence), `EventService` (validation + mapping + `HttpError`s), `EventController` (wires HTTP, forwards errors to the global handler).
+
+### Simulated actions (no file or note store)
+
+- **`document_uploaded`** — The API **only creates an `Event`** (for example with `metadata: { simulated: true }`). There is **no** file upload pipeline, storage, or virus scan in this codebase yet.
+- **`note_added`** — Same: **only** an event row, typically with **`metadata.note`** holding the text. There is **no** separate `Note` table or persistence beyond that JSON.
+
+That keeps the contract stable when you later add real uploads or notes: you would still emit the same event types after the real work succeeds.
+
+### Frontend: what was added
+
+- **`EventsPanel`** (`frontend/src/components/EventsPanel.tsx`) on the **home** page, styled via `page.module.css` (`eventsSection`, inputs, list, and so on).
+- The panel asks for an **account id** and a **JWT access token** (paste from **`POST /auth/login`**) so the browser can call protected routes without coupling the demo to the refresh cookie flow.
+- **“Upload Document”** sends **`POST /events`** with **`type: "document_uploaded"`** and simulated metadata.
+- **“Add Note”** uses a **textarea** and sends **`type: "note_added"`** with **`metadata: { note: "..." }`**.
+- **React Query** — `useQuery` loads **`GET /events?accountId=...`** when both fields are filled; **`useMutation`** invalidates that query after a successful create so the list stays in sync with the database.
+
 ## Environment
 
 Each app loads its own env files and documents variables in `backend/.env.example` and `frontend/.env.example`. Real secrets stay out of git via each folder’s `.gitignore`.

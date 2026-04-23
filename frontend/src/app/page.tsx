@@ -1,4 +1,5 @@
 import styles from "./page.module.css";
+import { EventsPanel } from "@/components/EventsPanel";
 import { HealthStatus } from "@/components/HealthStatus";
 
 export default function Home() {
@@ -9,6 +10,7 @@ export default function Home() {
           <h1>Creditly</h1>
           <p>Next.js App Router with React Query calling the Express API.</p>
           <HealthStatus />
+          <EventsPanel />
         </div>
       </main>
     </div>
