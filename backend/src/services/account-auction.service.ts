@@ -4,6 +4,8 @@ import { publishEventCreated } from "../event-bus/publish-domain-event.js";
 import { HttpError } from "../utils/http-error.js";
 import { eventTypeToApi } from "../utils/event-type-api.js";
 import { AccountAuctionRepository } from "../repositories/account-auction.repository.js";
+import type { AuthUser } from "../types/auth-user.js";
+import { AccountAccessService } from "./account-access.service.js";
 import type { EventApiRow } from "./event.service.js";
 
 const SPECIALISATIONS: Specialisation[] = [
@@ -32,11 +34,12 @@ export type AuctionCreatedApi = {
 export class AccountAuctionService {
   constructor(
     private readonly repo: AccountAuctionRepository,
-    private readonly bus: EventBus
+    private readonly bus: EventBus,
+    private readonly accountAccess: AccountAccessService
   ) {}
 
   async createForAccount(
-    userId: string,
+    user: AuthUser,
     accountId: string,
     body: unknown
   ): Promise<{ auction: AuctionCreatedApi; event: EventApiRow }> {
@@ -50,6 +53,8 @@ export class AccountAuctionService {
         classification = c;
       }
     }
+
+    await this.accountAccess.assertManagerAdminCanAccessAccount(user, accountId);
 
     const account = await this.repo.findAccountForAuctionCreate(accountId);
     if (!account) {
@@ -68,7 +73,7 @@ export class AccountAuctionService {
     try {
       const { auction, eventRow } = await this.repo.createAuctionAndOpenedEvent({
         accountId,
-        userId,
+        userId: user.id,
         classification,
         openedAt,
         expiresAt,

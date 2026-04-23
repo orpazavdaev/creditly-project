@@ -4,6 +4,8 @@ import { publishEventCreated } from "../event-bus/publish-domain-event.js";
 import { HttpError } from "../utils/http-error.js";
 import { API_EVENT_TYPES, eventTypeToApi, parseEventTypeFromApi } from "../utils/event-type-api.js";
 import { EventRepository } from "../repositories/event.repository.js";
+import type { AuthUser } from "../types/auth-user.js";
+import { AccountAccessService } from "./account-access.service.js";
 
 export type EventApiRow = {
   id: string;
@@ -17,13 +19,11 @@ export type EventApiRow = {
 export class EventService {
   constructor(
     private readonly repo: EventRepository,
-    private readonly bus: EventBus
+    private readonly bus: EventBus,
+    private readonly accountAccess: AccountAccessService
   ) {}
 
-  async create(
-    userId: string,
-    body: unknown
-  ): Promise<{ event: EventApiRow }> {
+  async create(user: AuthUser, body: unknown): Promise<{ event: EventApiRow }> {
     if (!body || typeof body !== "object") {
       throw new HttpError(400, "Invalid body", "invalid_body");
     }
@@ -38,10 +38,7 @@ export class EventService {
     if (!prismaType) {
       throw new HttpError(400, "Invalid type", "invalid_type");
     }
-    const exists = await this.repo.accountExists(accountId);
-    if (!exists) {
-      throw new HttpError(404, "Account not found", "account_not_found");
-    }
+    await this.accountAccess.assertStaffCanAccessAccount(user, accountId);
     let meta: Prisma.InputJsonValue = {};
     if (metadata !== undefined && metadata !== null) {
       if (typeof metadata !== "object" || Array.isArray(metadata)) {
@@ -51,7 +48,7 @@ export class EventService {
     }
     const row = await this.repo.create({
       accountId,
-      userId,
+      userId: user.id,
       type: prismaType,
       metadata: meta,
     });
@@ -59,14 +56,11 @@ export class EventService {
     return { event: this.toApi(row) };
   }
 
-  async listByAccount(accountId: string | undefined): Promise<{ events: EventApiRow[] }> {
+  async listByAccount(user: AuthUser, accountId: string | undefined): Promise<{ events: EventApiRow[] }> {
     if (typeof accountId !== "string" || !accountId) {
       throw new HttpError(400, "accountId query parameter is required", "invalid_query");
     }
-    const exists = await this.repo.accountExists(accountId);
-    if (!exists) {
-      throw new HttpError(404, "Account not found", "account_not_found");
-    }
+    await this.accountAccess.assertStaffCanAccessAccount(user, accountId);
     const rows = await this.repo.findByAccountId(accountId);
     return { events: rows.map((r) => this.toApi(r)) };
   }

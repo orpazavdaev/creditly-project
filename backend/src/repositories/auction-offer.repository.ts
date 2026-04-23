@@ -1,9 +1,10 @@
-import type { AuctionOpportunity, BankOffer, Event } from "@prisma/client";
+import type { AuctionOpportunity, BankOffer, Event, Specialisation } from "@prisma/client";
 import { prisma } from "./prisma.js";
 
 export type BankerForList = {
   bankId: string | null;
   role: string;
+  specialisation: Specialisation[];
 };
 
 export type BankerForSubmit = {
@@ -18,18 +19,19 @@ export class AuctionOfferRepository {
   findBankerForList(userId: string): Promise<BankerForList | null> {
     return prisma.user.findUnique({
       where: { id: userId },
-      select: { bankId: true, role: true },
+      select: { bankId: true, role: true, specialisation: true },
     });
   }
 
   findAuctionByIdForList(auctionId: string): Promise<{
     id: string;
+    classification: AuctionOpportunity["classification"];
     status: AuctionOpportunity["status"];
     expiresAt: Date;
   } | null> {
     return prisma.auctionOpportunity.findUnique({
       where: { id: auctionId },
-      select: { id: true, status: true, expiresAt: true },
+      select: { id: true, classification: true, status: true, expiresAt: true },
     });
   }
 

@@ -13,13 +13,10 @@ export function createAuctionRouter(
   const r = Router();
   const auth = authenticateJWT(env);
   const bankerOnly = { allowAdminBypass: false } as const;
-  r.post("/", auth, requireRoles(["MANAGER"]), controller.create);
-  r.post(
-    "/:id/close",
-    auth,
-    requireRoles(["ADMIN", "MANAGER"], { allowAdminBypass: false }),
-    controller.close
-  );
+  const managerAdminOnly = requireRoles(["ADMIN", "MANAGER"], { allowAdminBypass: false });
+  r.get("/", auth, requireRole("BANKER", bankerOnly), controller.listRelevantForBanker);
+  r.post("/", auth, managerAdminOnly, controller.create);
+  r.post("/:id/close", auth, managerAdminOnly, controller.close);
   r.get("/:id/offers", auth, requireRole("BANKER", bankerOnly), offerController.list);
   r.post("/:id/offers", auth, requireRole("BANKER", bankerOnly), offerController.submit);
   return r;

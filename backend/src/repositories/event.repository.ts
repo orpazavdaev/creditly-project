@@ -2,12 +2,6 @@ import type { EventType, Prisma } from "@prisma/client";
 import { prisma } from "./prisma.js";
 
 export class EventRepository {
-  accountExists(accountId: string): Promise<boolean> {
-    return prisma.account
-      .findUnique({ where: { id: accountId }, select: { id: true } })
-      .then((r) => r !== null);
-  }
-
   create(data: {
     accountId: string;
     userId: string;

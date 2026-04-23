@@ -11,7 +11,7 @@ export class EventController {
         next(new HttpError(401, "Unauthorized", "unauthorized"));
         return;
       }
-      const out = await this.service.create(req.user.id, req.body);
+      const out = await this.service.create(req.user, req.body);
       res.status(201).json(out);
     } catch (e) {
       next(e);
@@ -20,7 +20,12 @@ export class EventController {
 
   list = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      if (!req.user) {
+        next(new HttpError(401, "Unauthorized", "unauthorized"));
+        return;
+      }
       const out = await this.service.listByAccount(
+        req.user,
         typeof req.query.accountId === "string" ? req.query.accountId : undefined
       );
       res.status(200).json(out);

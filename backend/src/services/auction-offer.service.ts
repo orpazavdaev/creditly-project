@@ -3,21 +3,17 @@ import type { EventBus } from "../event-bus/event-bus.js";
 import { publishEventCreated } from "../event-bus/publish-domain-event.js";
 import { HttpError } from "../utils/http-error.js";
 import { eventTypeToApi } from "../utils/event-type-api.js";
+import { mapBankerSubmitOfferResponse, type BankerSubmitOfferResponse } from "../mappers/banker-responses.mapper.js";
 import { AuctionLifecycleRepository } from "../repositories/auction-lifecycle.repository.js";
 import { AuctionOfferRepository } from "../repositories/auction-offer.repository.js";
+import type { BankOfferApiRow } from "../types/bank-offer-api.js";
 import type { EventApiRow } from "./event.service.js";
 
-export type BankOfferApiRow = {
-  id: string;
-  auctionOpportunityId: string;
-  bankId: string;
-  bankerId: string;
-  totalInterestRate: number;
-  createdAt: string;
-};
+export type { BankOfferApiRow } from "../types/bank-offer-api.js";
 
 export type AuctionSummaryApi = {
   id: string;
+  classification: string;
   status: string;
   expiresAt: string;
 };
@@ -46,10 +42,14 @@ export class AuctionOfferService {
     if (!auction) {
       throw new HttpError(404, "Auction not found", "not_found");
     }
+    if (!banker.specialisation.includes(auction.classification)) {
+      throw new HttpError(404, "Auction not found", "not_found");
+    }
     const offers = await this.repo.findOffersByAuctionAndBank(auctionId, listBankId);
     return {
       auction: {
         id: auction.id,
+        classification: auction.classification,
         status: auction.status,
         expiresAt: auction.expiresAt.toISOString(),
       },
@@ -68,7 +68,7 @@ export class AuctionOfferService {
     userId: string,
     auctionId: string,
     body: unknown
-  ): Promise<{ offer: BankOfferApiRow; event: EventApiRow }> {
+  ): Promise<BankerSubmitOfferResponse> {
     if (!body || typeof body !== "object") {
       throw new HttpError(400, "Invalid body", "invalid_body");
     }
@@ -118,7 +118,7 @@ export class AuctionOfferService {
 
       publishEventCreated(this.bus, eventRow);
 
-      return {
+      return mapBankerSubmitOfferResponse({
         offer: {
           id: offer.id,
           auctionOpportunityId: offer.auctionOpportunityId,
@@ -135,7 +135,7 @@ export class AuctionOfferService {
           createdAt: eventRow.createdAt.toISOString(),
           metadata: eventRow.metadata,
         },
-      };
+      });
     } catch (e) {
       if (e instanceof HttpError) {
         throw e;
