@@ -30,6 +30,12 @@ export class DomainEventBusinessService {
       if (!auction) {
         return;
       }
+      if (auction.status === "CLOSED") {
+        return;
+      }
+      if (auction.status === "EXPIRED" && auction.bankOffers.length === 0) {
+        return;
+      }
       const offers = auction.bankOffers;
       const closedAt = new Date();
       if (offers.length === 0) {

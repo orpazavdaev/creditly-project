@@ -3,6 +3,7 @@ import type { EventBus } from "../event-bus/event-bus.js";
 import { publishEventCreated } from "../event-bus/publish-domain-event.js";
 import { HttpError } from "../utils/http-error.js";
 import { eventTypeToApi } from "../utils/event-type-api.js";
+import { AuctionLifecycleRepository } from "../repositories/auction-lifecycle.repository.js";
 import { AuctionOfferRepository } from "../repositories/auction-offer.repository.js";
 import type { EventApiRow } from "./event.service.js";
 
@@ -15,13 +16,23 @@ export type BankOfferApiRow = {
   createdAt: string;
 };
 
+export type AuctionSummaryApi = {
+  id: string;
+  status: string;
+  expiresAt: string;
+};
+
 export class AuctionOfferService {
   constructor(
     private readonly repo: AuctionOfferRepository,
+    private readonly lifecycleRepo: AuctionLifecycleRepository,
     private readonly bus: EventBus
   ) {}
 
-  async listOffersForBanker(userId: string, auctionId: string): Promise<{ offers: BankOfferApiRow[] }> {
+  async listOffersForBanker(
+    userId: string,
+    auctionId: string
+  ): Promise<{ auction: AuctionSummaryApi; offers: BankOfferApiRow[] }> {
     const banker = await this.repo.findBankerForList(userId);
     if (!banker || banker.role !== "BANKER") {
       throw new HttpError(403, "Forbidden", "forbidden");
@@ -30,12 +41,18 @@ export class AuctionOfferService {
       throw new HttpError(400, "Banker must belong to a bank", "no_bank");
     }
     const listBankId = banker.bankId;
+    await this.lifecycleRepo.expireOpenIfPastDue(auctionId);
     const auction = await this.repo.findAuctionByIdForList(auctionId);
     if (!auction) {
       throw new HttpError(404, "Auction not found", "not_found");
     }
     const offers = await this.repo.findOffersByAuctionAndBank(auctionId, listBankId);
     return {
+      auction: {
+        id: auction.id,
+        status: auction.status,
+        expiresAt: auction.expiresAt.toISOString(),
+      },
       offers: offers.map((o) => ({
         id: o.id,
         auctionOpportunityId: o.auctionOpportunityId,
@@ -70,6 +87,7 @@ export class AuctionOfferService {
     }
     const bankId = banker.bankId;
 
+    await this.lifecycleRepo.expireOpenIfPastDue(auctionId);
     const auction = await this.repo.findAuctionById(auctionId);
     if (!auction) {
       throw new HttpError(404, "Auction not found", "not_found");

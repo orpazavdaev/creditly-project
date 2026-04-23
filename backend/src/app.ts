@@ -15,8 +15,10 @@ import { AuthRepository } from "./repositories/auth.repository.js";
 import { EventRepository } from "./repositories/event.repository.js";
 import { HealthRepository } from "./repositories/health.repository.js";
 import { AccountAuctionRepository } from "./repositories/account-auction.repository.js";
+import { AuctionLifecycleRepository } from "./repositories/auction-lifecycle.repository.js";
 import { AuctionOfferRepository } from "./repositories/auction-offer.repository.js";
 import { AccountAuctionService } from "./services/account-auction.service.js";
+import { AuctionCloseService } from "./services/auction-close.service.js";
 import { AuctionOfferService } from "./services/auction-offer.service.js";
 import { AuthService } from "./services/auth.service.js";
 import { EventService } from "./services/event.service.js";
@@ -32,6 +34,7 @@ import { notFound } from "./middleware/not-found.js";
 import { requestContext } from "./middleware/request-context.js";
 
 export function createApp(env: AppEnv, eventBus: EventBus = appEventBus): express.Express {
+  const auctionLifecycleRepo = new AuctionLifecycleRepository();
   const app = express();
   app.use(requestContext);
   app.use(cookieParser());
@@ -58,8 +61,10 @@ export function createApp(env: AppEnv, eventBus: EventBus = appEventBus): expres
     "/auctions",
     createAuctionRouter(
       env,
-      new AuctionController(),
-      new AuctionOfferController(new AuctionOfferService(new AuctionOfferRepository(), eventBus))
+      new AuctionController(new AuctionCloseService(auctionLifecycleRepo, eventBus)),
+      new AuctionOfferController(
+        new AuctionOfferService(new AuctionOfferRepository(), auctionLifecycleRepo, eventBus)
+      )
     )
   );
   app.use("/bank-offers", createBankOfferRouter(env, new BankOfferController()));

@@ -1,4 +1,5 @@
 import styles from "./page.module.css";
+import { BankAuctionOffersPanel } from "@/components/BankAuctionOffersPanel";
 import { EventsPanel } from "@/components/EventsPanel";
 import { HealthStatus } from "@/components/HealthStatus";
 
@@ -11,6 +12,7 @@ export default function Home() {
           <p>Next.js App Router with React Query calling the Express API.</p>
           <HealthStatus />
           <EventsPanel />
+          <BankAuctionOffersPanel />
         </div>
       </main>
     </div>

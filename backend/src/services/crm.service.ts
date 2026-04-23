@@ -22,7 +22,8 @@ export class CrmService {
     if (
       type !== "DOCUMENT_UPLOADED" &&
       type !== "STATUS_CHANGED" &&
-      type !== "AUCTION_OPENED"
+      type !== "AUCTION_OPENED" &&
+      type !== "AUCTION_CLOSED"
     ) {
       return;
     }

@@ -22,10 +22,14 @@ export class AuctionOfferRepository {
     });
   }
 
-  findAuctionByIdForList(auctionId: string): Promise<{ id: string } | null> {
+  findAuctionByIdForList(auctionId: string): Promise<{
+    id: string;
+    status: AuctionOpportunity["status"];
+    expiresAt: Date;
+  } | null> {
     return prisma.auctionOpportunity.findUnique({
       where: { id: auctionId },
-      select: { id: true },
+      select: { id: true, status: true, expiresAt: true },
     });
   }
 
