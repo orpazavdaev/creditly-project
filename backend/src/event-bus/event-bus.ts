@@ -16,7 +16,12 @@ export class EventBus {
     const set = this.handlers.get(event);
     if (!set) return;
     for (const h of set) {
-      h(payload);
+      try {
+        (h as Handler<T>)(payload);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`[EventBus] handler error on "${event}": ${msg}\n`);
+      }
     }
   }
 }

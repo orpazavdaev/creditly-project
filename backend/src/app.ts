@@ -1,6 +1,8 @@
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
+import type { EventBus } from "./event-bus/event-bus.js";
+import { appEventBus } from "./event-bus/app-event-bus.js";
 import type { AppEnv } from "./types/env.js";
 import { AccountController } from "./controllers/account.controller.js";
 import { AuctionController } from "./controllers/auction.controller.js";
@@ -24,7 +26,7 @@ import { errorHandler } from "./middleware/error-handler.js";
 import { notFound } from "./middleware/not-found.js";
 import { requestContext } from "./middleware/request-context.js";
 
-export function createApp(env: AppEnv): express.Express {
+export function createApp(env: AppEnv, eventBus: EventBus = appEventBus): express.Express {
   const app = express();
   app.use(requestContext);
   app.use(cookieParser());
@@ -50,7 +52,10 @@ export function createApp(env: AppEnv): express.Express {
   app.use("/auctions", createAuctionRouter(env, new AuctionController()));
   app.use("/bank-offers", createBankOfferRouter(env, new BankOfferController()));
   app.use("/accounts", createAccountRouter(env, new AccountController()));
-  app.use("/events", createEventRouter(env, new EventController(new EventService(new EventRepository()))));
+  app.use(
+    "/events",
+    createEventRouter(env, new EventController(new EventService(new EventRepository(), eventBus)))
+  );
 
   app.use(notFound);
   app.use(errorHandler);

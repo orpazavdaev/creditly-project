@@ -158,6 +158,19 @@ That keeps the contract stable when you later add real uploads or notes: you wou
 - **“Add Note”** uses a **textarea** and sends **`type: "note_added"`** with **`metadata: { note: "..." }`**.
 - **React Query** — `useQuery` loads **`GET /events?accountId=...`** when both fields are filled; **`useMutation`** invalidates that query after a successful create so the list stays in sync with the database.
 
+### In-process EventBus (domain event → side effects)
+
+After an **`Event`** row is persisted, **`EventService`** publishes **`event.created`** on the shared **`appEventBus`** (`event-bus/app-event-bus.ts`) with a **`DomainEventCreatedPayload`** (`event-bus/domain-events.ts`: ids, Prisma type, API type string, timestamps, metadata).
+
+**Why event-driven here:** HTTP stays thin (validate → write → respond) while **follow-up work** runs through subscribers without blocking the request with every downstream system. Today that is only **stdout stubs**; tomorrow the same hook can call internal services (notifications, projections) or outbound CRM without growing `EventService` into a god object.
+
+**Where it is wired:** **`registerEventBusListeners`** runs once at process startup in **`index.ts`** (before `createApp`) and attaches:
+
+- **`event-bus/listeners/business-logic.listener.ts`** — placeholder for in-app reactions (rules, aggregates, internal workflows).
+- **`event-bus/listeners/crm-integration.listener.ts`** — placeholder for external CRM sync or webhooks (would live next to `integration/` helpers when real I/O exists).
+
+**Why no queue yet:** everything runs **in-process** on the same Node thread. **`EventBus.emit`** wraps each handler in **`try/catch`** so one failing listener does not prevent the other from running or break the HTTP response path after the DB commit.
+
 ## Environment
 
 Each app loads its own env files and documents variables in `backend/.env.example` and `frontend/.env.example`. Real secrets stay out of git via each folder’s `.gitignore`.

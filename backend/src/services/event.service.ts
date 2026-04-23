@@ -1,4 +1,6 @@
 import type { Event, Prisma } from "@prisma/client";
+import type { EventBus } from "../event-bus/event-bus.js";
+import { DOMAIN_EVENT_CREATED } from "../event-bus/domain-events.js";
 import { HttpError } from "../utils/http-error.js";
 import { API_EVENT_TYPES, eventTypeToApi, parseEventTypeFromApi } from "../utils/event-type-api.js";
 import { EventRepository } from "../repositories/event.repository.js";
@@ -13,7 +15,10 @@ export type EventApiRow = {
 };
 
 export class EventService {
-  constructor(private readonly repo: EventRepository) {}
+  constructor(
+    private readonly repo: EventRepository,
+    private readonly bus: EventBus
+  ) {}
 
   async create(
     userId: string,
@@ -49,6 +54,15 @@ export class EventService {
       userId,
       type: prismaType,
       metadata: meta,
+    });
+    this.bus.emit(DOMAIN_EVENT_CREATED, {
+      id: row.id,
+      accountId: row.accountId,
+      userId: row.userId,
+      type: row.type,
+      typeApi: eventTypeToApi(row.type),
+      createdAt: row.createdAt,
+      metadata: row.metadata,
     });
     return { event: this.toApi(row) };
   }
