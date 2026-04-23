@@ -14,6 +14,15 @@ export type AccountListItem = {
   createdAt: string;
 };
 
+export type AccountDetailItem = AccountListItem & {
+  auction: {
+    id: string;
+    status: string;
+    expiresAt: string;
+    classification: string;
+  } | null;
+};
+
 export type EventRow = {
   id: string;
   accountId: string;

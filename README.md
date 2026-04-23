@@ -21,13 +21,13 @@ The backend follows a **layered** structure so HTTP, use cases, and persistence 
 
 - **`index.ts` / `app.ts`** — Process bootstrap: load env, register event-bus listeners once, create Express app, start jobs (for example refresh-token cleanup), listen on a port.
 - **`modules/`** — Route factories: mount paths, stack middleware (`authenticateJWT`, `requireRole` / `requireRoles`), delegate to controllers.
-- **`controllers/`** — Map HTTP (params, body, status codes) to service calls; no business rules beyond basic validation.
+- **`controllers/`** — Map HTTP (params, body, status codes) to service calls; validation of JSON bodies for auth and manual event creation uses **Zod** in services (`validation/schemas.ts`, `validation/parse-body.ts`).
 - **`services/`** — Use cases and orchestration (accounts, auctions, offers, events, auth, CRM stub, domain rules on events).
 - **`repositories/`** — Prisma access and query shapes; keeps SQL/ORM details out of services.
 - **`mappers/`** — API-facing DTOs (for example stripping fields for banker responses).
 - **`event-bus/`** — Lightweight **in-process** pub/sub (`EventBus`: `on` / `emit`). Used for reactions after a row is written, not as a replacement for HTTP.
 - **`middleware/`** — Auth, errors, request context.
-- **Outbound integrations** — Place HTTP clients or vendor SDKs under `src/integration/` when added (CRM today is mocked in-process).
+- **Outbound integrations** — `src/integration/crm-mock.ts` holds the **mock CRM** outbound call (random failure). `CrmService` orchestrates persistence of sync results and calls that mock from the event pipeline, not from HTTP controllers.
 - **`jobs/`** — Scheduled in-process tasks.
 
 The frontend uses the **App Router**, **React Query** for server state, a shared **`apiFetch`** helper, and **`AuthProvider`** for access tokens plus refresh via cookies.
@@ -88,6 +88,8 @@ Staff routes that touch a specific account (`/events`, account auctions, auction
 
 - **`GET /accounts`** — **`AccountListService`** rejects **`BANKER`** with **403**; other roles receive scoped lists.
 
+- **`GET /accounts/:id`** — Same staff roles as the list; **`AccountListService.getById`** runs **`assertStaffCanAccessAccount`** then returns one account plus **optional auction summary** (status, expiry, classification). Matches the assignment API surface and avoids loading the full list for the detail page.
+
 Together, RBAC is **defense in depth**: route guards for coarse role boundaries, services for data scope and blind-auction behavior.
 
 ---
@@ -98,7 +100,7 @@ A **blind** auction here means bankers compete on **rate** and **timing** withou
 
 **What bankers see**
 
-- **Auction list** (`GET /auctions`) returns items with **`id`**, **`classification`**, **`status`**, **`openedAt`**, **`expiresAt`**, **`closedAt`** — no `accountId`, no customer contact fields (`banker-auction-list.mapper`).
+- **Auction list** (`GET /auctions`) returns only **`OPEN`** opportunities whose **`classification`** is in the banker’s **`specialisation`** array (assignment: bankers see **open**, eligible auctions only). Rows include **`id`**, **`classification`**, **`status`**, **`openedAt`**, **`expiresAt`**, **`closedAt`** — no `accountId`, no customer contact fields (`banker-auction-list.mapper`).
 - **Offer submission** persists internally with `accountId` for integrity, but the **HTTP response** maps the related event through **`mapBankerSubmitOfferResponse`**, which **omits `accountId`** from the `event` object returned to the client.
 
 **Rules**
@@ -167,6 +169,12 @@ This repository ships **`prisma/schema.prisma`** and uses **`prisma db push`** (
 **Prisma 7 configuration**
 
 - **`prisma.config.ts`** defines the datasource URL and wires **`prisma db seed`** to **`tsx prisma/seed.ts`**. Run **`npm run db:seed`** after push when you need deterministic demo data.
+
+---
+
+## Request validation (Zod)
+
+`POST /auth/login`, `POST /auth/register`, and `POST /events` use **Zod** schemas (`backend/src/validation/schemas.ts`) parsed through **`parseBody`** in **AuthService** and **EventService**. Invalid JSON shapes return **400** with code **`invalid_body`** (and a short message from the first schema issue). Other routes keep checks in their services to avoid a second DTO layer everywhere.
 
 ---
 

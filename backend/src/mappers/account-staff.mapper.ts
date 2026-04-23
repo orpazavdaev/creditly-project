@@ -1,4 +1,4 @@
-import type { AccountStaffListRow } from "../repositories/account.repository.js";
+import type { AccountStaffDetailRow, AccountStaffListRow } from "../repositories/account.repository.js";
 
 export type AccountStaffListItem = {
   id: string;
@@ -14,6 +14,15 @@ export type AccountStaffListItem = {
   createdAt: string;
 };
 
+export type AccountStaffDetailItem = AccountStaffListItem & {
+  auction: {
+    id: string;
+    status: string;
+    expiresAt: string;
+    classification: string;
+  } | null;
+};
+
 export function toAccountStaffListItem(row: AccountStaffListRow): AccountStaffListItem {
   return {
     id: row.id,
@@ -27,5 +36,21 @@ export function toAccountStaffListItem(row: AccountStaffListRow): AccountStaffLi
     syncStatus: row.syncStatus,
     failureReason: row.failureReason,
     createdAt: row.createdAt.toISOString(),
+  };
+}
+
+export function toAccountStaffDetailItem(row: AccountStaffDetailRow): AccountStaffDetailItem {
+  const base = toAccountStaffListItem(row);
+  const auc = row.auctionOpportunity;
+  return {
+    ...base,
+    auction: auc
+      ? {
+          id: auc.id,
+          status: auc.status,
+          expiresAt: auc.expiresAt.toISOString(),
+          classification: auc.classification,
+        }
+      : null,
   };
 }

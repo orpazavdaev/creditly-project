@@ -7,7 +7,7 @@ import { useState } from "react";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { API_BASE } from "@/lib/config";
 import { useAuth } from "@/context/auth-context";
-import type { AccountListItem, EventRow } from "@/types/api";
+import type { AccountDetailItem, EventRow } from "@/types/api";
 import { canRecordDocumentUploadAndNotes } from "@/types/roles";
 import styles from "@/app/ui.module.css";
 
@@ -20,17 +20,18 @@ export default function AccountEventsPage() {
   const canAct = user ? canRecordDocumentUploadAndNotes(user.role) : false;
 
   const accountQ = useQuery({
-    queryKey: ["accounts", API_BASE],
-    queryFn: () => apiFetch<{ accounts: AccountListItem[] }>("/accounts"),
+    queryKey: ["account", id, API_BASE],
+    queryFn: () => apiFetch<{ account: AccountDetailItem }>(`/accounts/${encodeURIComponent(id)}`),
+    enabled: Boolean(id),
   });
 
-  const account = accountQ.data?.accounts.find((a) => a.id === id);
+  const account = accountQ.data?.account;
 
   const eventsQ = useQuery({
     queryKey: ["events", API_BASE, id],
     queryFn: () =>
       apiFetch<{ events: EventRow[] }>(`/events?accountId=${encodeURIComponent(id)}`),
-    enabled: Boolean(id && account),
+    enabled: Boolean(id && accountQ.data?.account),
   });
 
   const addNote = useMutation({
@@ -46,6 +47,7 @@ export default function AccountEventsPage() {
     onSuccess: () => {
       setNote("");
       void qc.invalidateQueries({ queryKey: ["events", API_BASE, id] });
+      void qc.invalidateQueries({ queryKey: ["account", id, API_BASE] });
     },
   });
 
@@ -61,6 +63,7 @@ export default function AccountEventsPage() {
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["events", API_BASE, id] });
+      void qc.invalidateQueries({ queryKey: ["account", id, API_BASE] });
     },
   });
 

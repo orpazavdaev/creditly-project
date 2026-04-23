@@ -8,12 +8,8 @@ import type { AppEnv } from "../types/env.js";
 import { AuthRepository } from "../repositories/auth.repository.js";
 import { HttpError } from "../utils/http-error.js";
 import { hashToken } from "../utils/hash-token.js";
-
-const USER_ROLES: UserRole[] = ["ADMIN", "MANAGER", "USER", "BANKER"];
-
-function isUserRole(v: string): v is UserRole {
-  return USER_ROLES.includes(v as UserRole);
-}
+import { parseBody } from "../validation/parse-body.js";
+import { LoginBodySchema, RegisterBodySchema } from "../validation/schemas.js";
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -28,22 +24,10 @@ export class AuthService {
   ) {}
 
   async register(body: unknown): Promise<{ id: string; email: string; role: UserRole }> {
-    if (!body || typeof body !== "object") {
-      throw new HttpError(400, "Invalid body", "invalid_body");
-    }
-    const { email, password, role } = body as Record<string, unknown>;
-    if (typeof email !== "string" || typeof password !== "string" || typeof role !== "string") {
-      throw new HttpError(400, "email, password, and role are required", "invalid_body");
-    }
+    const { email, password, role } = parseBody(RegisterBodySchema, body);
     const n = normalizeEmail(email);
     if (!EMAIL_RE.test(n)) {
       throw new HttpError(400, "Invalid email", "invalid_email");
-    }
-    if (password.length < 8) {
-      throw new HttpError(400, "Password must be at least 8 characters", "invalid_password");
-    }
-    if (!isUserRole(role)) {
-      throw new HttpError(400, "Invalid role", "invalid_role");
     }
     const passwordHash = await bcrypt.hash(password, 10);
     try {
@@ -65,14 +49,11 @@ export class AuthService {
     body: unknown,
     res: Response
   ): Promise<{ accessToken: string; expiresIn: number }> {
-    if (!body || typeof body !== "object") {
-      throw new HttpError(400, "Invalid body", "invalid_body");
-    }
-    const { email, password } = body as Record<string, unknown>;
-    if (typeof email !== "string" || typeof password !== "string") {
-      throw new HttpError(400, "email and password are required", "invalid_body");
-    }
+    const { email, password } = parseBody(LoginBodySchema, body);
     const n = normalizeEmail(email);
+    if (!EMAIL_RE.test(n)) {
+      throw new HttpError(400, "Invalid email", "invalid_email");
+    }
     const user = await this.repo.findUserByEmail(n);
     if (!user) {
       throw new HttpError(401, "Invalid credentials", "invalid_credentials");

@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { API_BASE } from "@/lib/config";
-import type { AccountListItem } from "@/types/api";
+import type { AccountDetailItem } from "@/types/api";
 import { canOpenAuction } from "@/types/roles";
 import { useAuth } from "@/context/auth-context";
 import styles from "@/app/ui.module.css";
@@ -18,11 +18,12 @@ export default function AccountDetailPage() {
   const { user } = useAuth();
 
   const q = useQuery({
-    queryKey: ["accounts", API_BASE],
-    queryFn: () => apiFetch<{ accounts: AccountListItem[] }>("/accounts"),
+    queryKey: ["account", id, API_BASE],
+    queryFn: () => apiFetch<{ account: AccountDetailItem }>(`/accounts/${encodeURIComponent(id)}`),
+    enabled: Boolean(id),
   });
 
-  const account = q.data?.accounts.find((a) => a.id === id);
+  const account = q.data?.account;
 
   const createAuction = useMutation({
     mutationFn: () =>
@@ -35,6 +36,7 @@ export default function AccountDetailPage() {
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["accounts", API_BASE] });
+      void qc.invalidateQueries({ queryKey: ["account", id, API_BASE] });
     },
   });
 
@@ -82,6 +84,14 @@ export default function AccountDetailPage() {
           <dd className={styles.dd}>{account.lastActivity}</dd>
           <dt className={styles.dt}>CRM sync</dt>
           <dd className={styles.dd}>{account.syncStatus}</dd>
+          {account.auction && (
+            <>
+              <dt className={styles.dt}>Auction</dt>
+              <dd className={styles.dd}>
+                {account.auction.status} · ends {account.auction.expiresAt} · {account.auction.classification}
+              </dd>
+            </>
+          )}
           {account.failureReason && (
             <>
               <dt className={styles.dt}>Failure reason</dt>

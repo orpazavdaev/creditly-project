@@ -1,4 +1,4 @@
-import type { AccountStatus, SyncStatus } from "@prisma/client";
+import type { AccountStatus, AuctionOpportunityStatus, Specialisation, SyncStatus } from "@prisma/client";
 import { prisma } from "./prisma.js";
 
 const staffListSelect = {
@@ -35,6 +35,15 @@ export type AccountStaffListRow = {
   createdAt: Date;
 };
 
+export type AccountStaffDetailRow = AccountStaffListRow & {
+  auctionOpportunity: {
+    id: string;
+    status: AuctionOpportunityStatus;
+    expiresAt: Date;
+    classification: Specialisation;
+  } | null;
+};
+
 export class AccountRepository {
   findAccessInfoById(accountId: string): Promise<AccountAccessInfo | null> {
     return prisma.account.findUnique({
@@ -67,6 +76,23 @@ export class AccountRepository {
       where: { accountUsers: { some: { userId } } },
       orderBy: { createdAt: "desc" },
       select: staffListSelect,
+    });
+  }
+
+  findStaffDetailById(accountId: string): Promise<AccountStaffDetailRow | null> {
+    return prisma.account.findUnique({
+      where: { id: accountId },
+      select: {
+        ...staffListSelect,
+        auctionOpportunity: {
+          select: {
+            id: true,
+            status: true,
+            expiresAt: true,
+            classification: true,
+          },
+        },
+      },
     });
   }
 }

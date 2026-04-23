@@ -9,6 +9,24 @@ export class AccountController {
     private readonly accountList: AccountListService
   ) {}
 
+  getById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) {
+        next(new HttpError(401, "Unauthorized", "unauthorized"));
+        return;
+      }
+      const id = req.params.id;
+      if (typeof id !== "string" || !id) {
+        next(new HttpError(400, "Invalid account id", "invalid_params"));
+        return;
+      }
+      const out = await this.accountList.getById(req.user, id);
+      res.status(200).json(out);
+    } catch (e) {
+      next(e);
+    }
+  };
+
   list = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       if (!req.user) {

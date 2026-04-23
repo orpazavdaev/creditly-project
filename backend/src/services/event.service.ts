@@ -2,10 +2,12 @@ import type { Event, Prisma } from "@prisma/client";
 import type { EventBus } from "../event-bus/event-bus.js";
 import { publishEventCreated } from "../event-bus/publish-domain-event.js";
 import { HttpError } from "../utils/http-error.js";
-import { API_EVENT_TYPES, eventTypeToApi, parseEventTypeFromApi } from "../utils/event-type-api.js";
+import { eventTypeToApi, parseEventTypeFromApi } from "../utils/event-type-api.js";
 import { EventRepository } from "../repositories/event.repository.js";
 import type { AuthUser } from "../types/auth-user.js";
 import { AccountAccessService } from "./account-access.service.js";
+import { parseBody } from "../validation/parse-body.js";
+import { EventCreateBodySchema } from "../validation/schemas.js";
 
 export type EventApiRow = {
   id: string;
@@ -24,16 +26,9 @@ export class EventService {
   ) {}
 
   async create(user: AuthUser, body: unknown): Promise<{ event: EventApiRow }> {
-    if (!body || typeof body !== "object") {
-      throw new HttpError(400, "Invalid body", "invalid_body");
-    }
-    const { accountId, type, metadata } = body as Record<string, unknown>;
-    if (typeof accountId !== "string" || !accountId) {
-      throw new HttpError(400, "accountId is required", "invalid_body");
-    }
-    if (typeof type !== "string" || !API_EVENT_TYPES.includes(type)) {
-      throw new HttpError(400, "Invalid or missing type", "invalid_type");
-    }
+    const parsed = parseBody(EventCreateBodySchema, body);
+    const { accountId, type } = parsed;
+    const metadata = parsed.metadata ?? undefined;
     const prismaType = parseEventTypeFromApi(type);
     if (!prismaType) {
       throw new HttpError(400, "Invalid type", "invalid_type");
@@ -45,10 +40,7 @@ export class EventService {
     }
     await this.accountAccess.assertStaffCanAccessAccount(user, accountId);
     let meta: Prisma.InputJsonValue = {};
-    if (metadata !== undefined && metadata !== null) {
-      if (typeof metadata !== "object" || Array.isArray(metadata)) {
-        throw new HttpError(400, "metadata must be an object", "invalid_metadata");
-      }
+    if (metadata !== undefined) {
       meta = metadata as Prisma.InputJsonValue;
     }
     const row = await this.repo.create({

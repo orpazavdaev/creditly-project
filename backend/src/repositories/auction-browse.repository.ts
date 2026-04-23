@@ -28,7 +28,7 @@ export class AuctionBrowseRepository {
     return prisma.auctionOpportunity.findMany({
       where: {
         classification: { in: classifications },
-        status: { in: ["OPEN", "EXPIRED"] },
+        status: "OPEN",
       },
       select: {
         id: true,

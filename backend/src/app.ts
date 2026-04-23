@@ -44,7 +44,7 @@ export function createApp(env: AppEnv, eventBus: EventBus = appEventBus): expres
   const auctionLifecycleRepo = new AuctionLifecycleRepository();
   const accountRepo = new AccountRepository();
   const accountAccess = new AccountAccessService(accountRepo);
-  const accountListService = new AccountListService(accountRepo);
+  const accountListService = new AccountListService(accountRepo, accountAccess);
   const auctionBrowseService = new AuctionBrowseService(new AuctionBrowseRepository());
   const app = express();
   app.use(requestContext);
