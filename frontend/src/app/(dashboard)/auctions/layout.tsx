@@ -3,8 +3,8 @@
 import { RequireAuth } from "@/components/RequireAuth";
 import type { UserRole } from "@/types/roles";
 
-const BANKER: UserRole[] = ["BANKER"];
+const AUCTIONS_SECTION_ROLES: UserRole[] = ["BANKER", "ADMIN"];
 
 export default function AuctionsSectionLayout({ children }: { children: React.ReactNode }) {
-  return <RequireAuth roles={BANKER}>{children}</RequireAuth>;
+  return <RequireAuth roles={AUCTIONS_SECTION_ROLES}>{children}</RequireAuth>;
 }

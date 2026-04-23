@@ -16,7 +16,7 @@ export function createAuctionRouter(
   const managerAdminOnly = requireRoles(["ADMIN", "MANAGER"], { allowAdminBypass: false });
   r.get("/", auth, requireRoles(["ADMIN", "BANKER"], { allowAdminBypass: false }), controller.list);
   r.post("/:id/close", auth, managerAdminOnly, controller.close);
-  r.get("/:id/offers", auth, requireRole("BANKER", bankerOnly), offerController.list);
+  r.get("/:id/offers", auth, requireRoles(["BANKER", "ADMIN"], bankerOnly), offerController.list);
   r.post("/:id/offers", auth, requireRole("BANKER", bankerOnly), offerController.submit);
   return r;
 }

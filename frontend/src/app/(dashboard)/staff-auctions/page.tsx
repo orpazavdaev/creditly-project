@@ -59,11 +59,18 @@ export default function StaffAuctionsPage() {
                   </div>
                 )}
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.65rem", flexWrap: "wrap" }}>
                 <span className={styles.badge}>{a.status}</span>
                 <span className={styles.muted} style={{ fontSize: "0.8rem" }}>
                   Expires {new Date(a.expiresAt).toLocaleString()}
                 </span>
+                <Link
+                  href={`/auctions/${a.id}/offer`}
+                  className={styles.btnSecondary}
+                  style={{ display: "inline-block", textAlign: "center", padding: "0.45rem 0.85rem", fontSize: "0.85rem" }}
+                >
+                  View offers
+                </Link>
               </div>
             </div>
           ))}

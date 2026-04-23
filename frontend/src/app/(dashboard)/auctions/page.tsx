@@ -39,7 +39,11 @@ export default function AuctionsPage() {
   return (
     <>
       <h1 className={styles.pageTitle}>Auctions</h1>
-      <p className={styles.pageSubtitle}>Open auctions that match your specialisation.</p>
+      <p className={styles.pageSubtitle}>
+        {user?.role === "ADMIN"
+          ? "All auctions (admin view). Use a row to open offers and details."
+          : "Open auctions that match your specialisation."}
+      </p>
       {rows.length === 0 ? (
         <div className={styles.card}>
           <p className={styles.muted}>No matching auctions right now.</p>

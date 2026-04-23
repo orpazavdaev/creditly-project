@@ -14,7 +14,7 @@ export class AuctionOfferController {
         return;
       }
       const { id } = parseParams(PathAuctionIdSchema, req.params);
-      const out = await this.service.listOffersForBanker(req.user.id, id);
+      const out = await this.service.listOffers(req.user, id);
       res.status(200).json(out);
     } catch (e) {
       next(e);

@@ -10,6 +10,7 @@ import { mapBankerSubmitOfferResponse, type BankerSubmitOfferResponse } from "..
 import { AuctionLifecycleRepository } from "../repositories/auction-lifecycle.repository.js";
 import { AuctionOfferRepository } from "../repositories/auction-offer.repository.js";
 import type { BankOfferApiRow } from "../types/bank-offer-api.js";
+import type { AuthUser } from "../types/auth-user.js";
 
 export type AuctionSummaryApi = {
   id: string;
@@ -25,7 +26,55 @@ export class AuctionOfferService {
     private readonly bus: EventBus
   ) {}
 
-  async listOffersForBanker(
+  async listOffers(
+    user: AuthUser,
+    auctionId: string
+  ): Promise<{
+    auction: AuctionSummaryApi & { accountId?: string; openedAt?: string };
+    offers: Array<BankOfferApiRow & { bankName?: string; createdByLabel?: string }>;
+  }> {
+    if (user.role === "ADMIN") {
+      return this.listOffersForAdmin(auctionId);
+    }
+    if (user.role === "BANKER") {
+      return this.listOffersForBanker(user.id, auctionId);
+    }
+    throw new HttpError(403, "Forbidden", "forbidden");
+  }
+
+  private async listOffersForAdmin(auctionId: string): Promise<{
+    auction: AuctionSummaryApi & { accountId: string; openedAt: string };
+    offers: Array<BankOfferApiRow & { bankName: string; createdByLabel: string }>;
+  }> {
+    await this.lifecycleRepo.expireOpenIfPastDue(auctionId);
+    const auction = await this.repo.findAuctionByIdForAdminList(auctionId);
+    if (!auction) {
+      throw new HttpError(404, "Auction not found", "not_found");
+    }
+    const rows = await this.repo.findAllOffersByAuctionForAdmin(auctionId);
+    return {
+      auction: {
+        id: auction.id,
+        classification: auction.classification,
+        status: auction.status,
+        expiresAt: auction.expiresAt.toISOString(),
+        accountId: auction.accountId,
+        openedAt: auction.openedAt.toISOString(),
+      },
+      offers: rows.map((o) => ({
+        id: o.id,
+        auctionOpportunityId: o.auctionOpportunityId,
+        bankId: o.bankId,
+        bankerId: o.bankerId,
+        totalInterestRate: o.totalInterestRate,
+        createdAt: o.createdAt.toISOString(),
+        bankName: o.bank.name,
+        createdByLabel: emailLocalPart(o.banker.email),
+      })),
+    };
+  }
+
+  private async listOffersForBanker(
     userId: string,
     auctionId: string
   ): Promise<{ auction: AuctionSummaryApi; offers: BankOfferApiRow[] }> {

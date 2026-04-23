@@ -36,6 +36,36 @@ export class AuctionOfferRepository {
     });
   }
 
+  findAuctionByIdForAdminList(auctionId: string): Promise<{
+    id: string;
+    accountId: string;
+    classification: AuctionOpportunity["classification"];
+    status: AuctionOpportunity["status"];
+    expiresAt: Date;
+    openedAt: Date;
+  } | null> {
+    return prisma.auctionOpportunity.findUnique({
+      where: { id: auctionId },
+      select: { id: true, accountId: true, classification: true, status: true, expiresAt: true, openedAt: true },
+    });
+  }
+
+  findAllOffersByAuctionForAdmin(auctionId: string): Promise<
+    (BankOffer & {
+      bank: { name: string };
+      banker: { email: string };
+    })[]
+  > {
+    return prisma.bankOffer.findMany({
+      where: { auctionOpportunityId: auctionId },
+      include: {
+        bank: { select: { name: true } },
+        banker: { select: { email: true } },
+      },
+      orderBy: [{ totalInterestRate: "asc" }, { createdAt: "asc" }],
+    });
+  }
+
   findOffersByAuctionAndBank(auctionId: string, bankId: string): Promise<BankOffer[]> {
     return prisma.bankOffer.findMany({
       where: { auctionOpportunityId: auctionId, bankId },

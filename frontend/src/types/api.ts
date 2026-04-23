@@ -63,6 +63,8 @@ export type AuctionOffersResponse = {
     classification: string;
     status: string;
     expiresAt: string;
+    accountId?: string;
+    openedAt?: string;
   };
   offers: {
     id: string;
@@ -71,6 +73,8 @@ export type AuctionOffersResponse = {
     bankerId: string;
     totalInterestRate: number;
     createdAt: string;
+    bankName?: string;
+    createdByLabel?: string;
   }[];
 };
 
