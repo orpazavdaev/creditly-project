@@ -15,6 +15,7 @@ Separate `backend` and `frontend` packages so each can evolve, deploy, and scale
 - **`repositories/`** — Persistence and data access. Starting with a repository per aggregate keeps SQL/ORM details out of services.
 - **`integration/`** — Outbound HTTP or third-party SDKs. Isolates external systems from your core services so failures and retries are easier to reason about.
 - **`event-bus/`** — Lightweight in-process pub/sub for cross-module reactions without tight coupling. Swap for a broker later if needed.
+- **`jobs/`** — In-process scheduled work (for example refresh-token cleanup).
 - **`middleware/`** — Cross-cutting HTTP concerns (errors, request IDs, auth).
 - **`utils/`** and **`types/`** — Small shared helpers and shared TypeScript shapes.
 
