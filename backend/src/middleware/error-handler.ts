@@ -14,5 +14,11 @@ export function errorHandler(
     });
     return;
   }
-  res.status(500).json({ error: "internal_error", message: err.message });
+  const log =
+    err instanceof Error ? `${err.name}: ${err.message}\n${err.stack ?? ""}` : String(err);
+  process.stderr.write(`[error] ${log}\n`);
+  res.status(500).json({
+    error: "internal_error",
+    message: "Something went wrong. Please try again.",
+  });
 }

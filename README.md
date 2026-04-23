@@ -150,13 +150,22 @@ Domain **events** are rows in the Prisma **`Event`** model: they tie an **`accou
 
 That keeps the contract stable when you later add real uploads or notes: you would still emit the same event types after the real work succeeds.
 
-### Frontend: what was added
+### Frontend: what was added and why
 
-- **`EventsPanel`** (`frontend/src/components/EventsPanel.tsx`) on the **home** page, styled via `page.module.css` (`eventsSection`, inputs, list, and so on).
-- The panel asks for an **account id** and a **JWT access token** (paste from **`POST /auth/login`**) so the browser can call protected routes without coupling the demo to the refresh cookie flow.
-- **“Upload Document”** sends **`POST /events`** with **`type: "document_uploaded"`** and simulated metadata.
-- **“Add Note”** uses a **textarea** and sends **`type: "note_added"`** with **`metadata: { note: "..." }`**.
-- **React Query** — `useQuery` loads **`GET /events?accountId=...`** when both fields are filled; **`useMutation`** invalidates that query after a successful create so the list stays in sync with the database.
+- **App shape (Next.js App Router)** — Split into public auth routes (`/login`, `/register`) and protected dashboard routes under `frontend/src/app/(dashboard)`. This keeps entry points clear and separates auth screens from product flows.
+- **Session handling (`AuthProvider`)** — Centralized session state in `frontend/src/context/auth-context.tsx`, including access-token persistence and refresh-token rotation via `POST /auth/refresh` with credentials. This prevents duplicated auth logic and makes reload recovery predictable.
+- **Role-based UX + guardrails** — `frontend/src/components/AppShell.tsx` renders role-specific navigation, and `frontend/src/components/RequireAuth.tsx` enforces route-level role checks. The UI hides irrelevant areas while guards still protect direct URL access.
+- **API abstraction (`frontend/src/lib/api.ts`)** — Added a single fetch wrapper for base URL, bearer header, JSON requests, and normalized API errors. This keeps page components focused on UI behavior instead of transport details.
+- **React Query for all API state** — Queries and mutations power account lists/details, events, auctions, and offers. Mutations invalidate relevant keys so UI state stays fresh after writes.
+- **Implemented pages**
+  - `frontend/src/app/login/page.tsx` and `frontend/src/app/register/page.tsx`
+  - `frontend/src/app/(dashboard)/accounts/page.tsx`
+  - `frontend/src/app/(dashboard)/accounts/[id]/page.tsx`
+  - `frontend/src/app/(dashboard)/accounts/[id]/events/page.tsx`
+  - `frontend/src/app/(dashboard)/auctions/page.tsx`
+  - `frontend/src/app/(dashboard)/auctions/[id]/offer/page.tsx`
+- **Action visibility tied to policy** — The UI only presents actions the current role/state should perform (for example: account actions for staff roles, auction/offer flows for bankers, submit hidden when auction is not open/valid). Backend authorization remains the source of truth.
+- **Styling decisions (`frontend/src/app/ui.module.css`)** — Introduced a shared shell/card/form/button style system instead of feature-specific CSS modules. This improves visual consistency, loading/error readability, and future maintainability.
 
 ### In-process EventBus (domain event → side effects)
 

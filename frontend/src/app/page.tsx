@@ -1,20 +1,27 @@
-import styles from "./page.module.css";
-import { BankAuctionOffersPanel } from "@/components/BankAuctionOffersPanel";
-import { EventsPanel } from "@/components/EventsPanel";
-import { HealthStatus } from "@/components/HealthStatus";
+"use client";
 
-export default function Home() {
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { useAuth } from "@/context/auth-context";
+import { isBankerRole } from "@/types/roles";
+import styles from "@/app/ui.module.css";
+
+export default function HomePage() {
+  const { ready, user } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!ready) return;
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+    router.replace(isBankerRole(user.role) ? "/auctions" : "/accounts");
+  }, [ready, user, router]);
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <div className={styles.intro}>
-          <h1>Creditly</h1>
-          <p>Next.js App Router with React Query calling the Express API.</p>
-          <HealthStatus />
-          <EventsPanel />
-          <BankAuctionOffersPanel />
-        </div>
-      </main>
+    <div className={styles.centered}>
+      <p className={styles.muted}>Loading…</p>
     </div>
   );
 }

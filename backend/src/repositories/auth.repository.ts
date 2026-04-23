@@ -20,7 +20,6 @@ export class AuthRepository {
         email: data.email,
         passwordHash: data.passwordHash,
         role: data.role,
-        specialisation: [],
       },
     });
   }

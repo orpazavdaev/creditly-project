@@ -1,0 +1,64 @@
+"use client";
+
+import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
+import { API_BASE } from "@/lib/config";
+import type { AccountListItem } from "@/types/api";
+import styles from "@/app/ui.module.css";
+
+export default function AccountsPage() {
+  const q = useQuery({
+    queryKey: ["accounts", API_BASE],
+    queryFn: () => apiFetch<{ accounts: AccountListItem[] }>("/accounts"),
+  });
+
+  if (q.isPending) {
+    return (
+      <>
+        <h1 className={styles.pageTitle}>Accounts</h1>
+        <p className={styles.muted}>Loading accounts…</p>
+      </>
+    );
+  }
+
+  if (q.isError) {
+    return (
+      <>
+        <h1 className={styles.pageTitle}>Accounts</h1>
+        <div className={styles.errorBox}>{q.error instanceof Error ? q.error.message : "Failed to load"}</div>
+      </>
+    );
+  }
+
+  const rows = q.data?.accounts ?? [];
+
+  return (
+    <>
+      <h1 className={styles.pageTitle}>Accounts</h1>
+      <p className={styles.pageSubtitle}>Accounts you can access in this workspace.</p>
+      {rows.length === 0 ? (
+        <div className={styles.card}>
+          <p className={styles.muted}>No accounts yet.</p>
+        </div>
+      ) : (
+        <div className={styles.cardList}>
+          {rows.map((a) => (
+            <Link key={a.id} href={`/accounts/${a.id}`} className={styles.cardRow}>
+              <div>
+                <div style={{ fontWeight: 600 }}>{a.costumerName}</div>
+                <div className={styles.muted} style={{ fontSize: "0.85rem" }}>
+                  {a.costumerEmail}
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                {a.isHighActivity && <span className={styles.badge}>High activity</span>}
+                <span className={styles.badge}>{a.status}</span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
