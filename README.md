@@ -326,6 +326,8 @@ For **`winning.offer.selected`**, the same **`syncAccount`** path runs with **`c
 
 להשלים תרשים ולהסביר את הflow
 
+להסביר על הcleanjob
+
 | Artifact | Transport | Lifetime | Storage server-side |
 | -------- | ----------- | -------- | -------------------- |
 | **Access token** | `Authorization: Bearer` | Short (default **900s** via `ACCESS_TOKEN_EXPIRES_SECONDS`) | Not stored; JWT signed with `JWT_SECRET` |
@@ -413,27 +415,30 @@ This repository ships **`prisma/schema.prisma`** and uses **`prisma db push`** (
 
 ## Assumptions and trade-offs
 
-- **Auth sessions** — Refresh tokens use **rotation** and a **sliding** `expiresAt` (see **Token strategy**). There is **no idle timeout** or **absolute max session age**; an active client that refreshes before the refresh window ends can stay signed in indefinitely until cookies or DB state change.
-- **In-process event bus** — Simple and fast, but not durable: a crash after `emit` starts async work can drop side effects. Replacing with a queue or outbox would be the next step for hard reliability.
-- **JWT claims** — `role` is fixed until refresh; revoking access for a compromised token before expiry may require a denylist or very short access TTL (not implemented here).
-- **Blind auctions** — Privacy is enforced by **API design and RBAC**, not by removing relational integrity in the database.
-- **Lazy auction expiration** — Some paths explicitly expire overdue auctions before reads/writes; there is no separate cron closing every auction at the exact second of `expiresAt`.
-- **CRM** — Simulated random failures only; no real outbound integration or retry budget.
-- **Document upload / notes** — Events can represent uploads and notes; there is no separate blob store or note table in this slice.
-- **Error responses** — Non-HTTP errors are mapped to generic **500** responses so Prisma or stack traces are not leaked to clients (details stay in server logs where applicable).
-- **Monolith process** — API, listeners, and cleanup job share one Node process; horizontal scaling would require externalizing sessions, bus, and jobs.
-- **Account's eligiblity** —
-- **Event-driven** —
-- **ClosedAt field** —
-- **Analytics** —
-- **Admin can't create bank offers** —
+- **Auth sessions** — Refresh tokens use rotation with a sliding expiration model, meaning each refresh extends the session lifetime. This improves user experience by keeping active users logged in without interruption. The tradeoff is that there is no absolute session limit, so a long-lived active session can theoretically persist indefinitely until revoked manually or invalidated, which slightly increases long-term security exposure compared to a hard session cap.
+- **In-process event bus** — The system uses an in-memory event bus for simplicity and performance, enabling fast event propagation within the same Node process. The tradeoff is reduced reliability: if the process crashes after an event is emitted, side effects (such as CRM sync or DB updates) may be lost. A production upgrade would involve an external queue or outbox pattern for guaranteed delivery.
+- **SQL vs NoSQL decision** — The choice is detailed in the DB design section, but the main tradeoff is structured consistency and relational integrity (SQL) versus schema flexibility and horizontal scalability (NoSQL). SQL was prioritized due to strong transactional and relational requirements.
+- **Document upload / notes** — Document and note events are modeled conceptually without a dedicated storage layer or blob system. This simplifies the architecture and keeps the scope focused, but the tradeoff is reduced realism compared to a full production system where file storage and metadata separation would be required.
+- **Error responses** — All non-HTTP errors are normalized into generic 500 responses to avoid leaking internal implementation details such as Prisma errors or stack traces. The tradeoff is reduced client-side error granularity, but improved security and system hardening.
+- **Monolith process** — API, event listeners, and background jobs run within a single Node process for simplicity and fast development. This is appropriate for a bounded system scope and easier debugging, but the tradeoff is limited scalability and fault isolation. In production, these concerns would be split into separate services or workers.
+- **Account eligibility logic** — An account becomes eligible for auctions only after document upload and reaching the READY_FOR_AUCTION state. This enforces a clear business rule that ensures only verified accounts enter financial workflows, improving data integrity and process correctness.
+- **Event-driven architecture** — The system uses an event-driven approach to decouple actions (e.g. document upload, offer submission) from side effects like CRM sync or analytics updates. This improves extensibility and separation of concerns, but introduces complexity in debugging and potential eventual consistency tradeoffs.
+- **Auction closedAt field** — The closedAt field is stored explicitly to represent the exact time an auction expires (e.g. three days after creation), instead of recalculating it dynamically from createdAt on every query. This improves performance and simplifies logic, especially for filtering auctions by status (open, closed, expired) and for analytics. The tradeoff is a small increase in storage and the need to ensure consistency between createdAt and closedAt, but in this case the benefit of avoiding repeated calculations and keeping queries efficient outweighs the cost.
+- **Analytics design** — The selected analytics focus on operational visibility (e.g. total accounts, auction states, offer metrics, CRM sync success/failure). The tradeoff is that the system does not yet support deep ad-hoc analytics, but instead prioritizes predefined, business-relevant KPIs.
+- **Admin restriction on bank offers** — Despite full RBAC permissions, admins are not allowed to create bank offers because they are not associated with a specific financial institution context. This enforces domain correctness over pure permission flexibility, preventing logically invalid system states.
+- **User-account relationship model** — Users are allowed to be linked to accounts and perform actions directly on them without additional approval layers.
 ---
 
 ## What I would do in a larger scale and real production
- - **Message broker** —
-- **Rate limiting** —
-- **Pagination** —
-- **Districtive analitycs colors** —
-- **Absolute max session age** —
-- **Role selection in registration** —
+ - **Message broker** — In a production-ready system, I would extract event handling into a dedicated message broker system such as Kafka. A message broker is a middleware that enables asynchronous communication between services by publishing events to topics and consuming them independently. Instead of tightly coupling event logic inside the main backend, producers would publish events (e.g. document_uploaded) to specific topics, and separate consumer services would process them (e.g. syncing with CRM or writing to the database). This improves scalability, separation of concerns, and fault tolerance, since the system can handle high throughput and grow the number of event types and consumers independently. It also reduces complexity in the core application logic and supports distributed processing at scale.
+- **Rate limiting** — This mechanism controls how many requests a user can send within a given time window (e.g. 10 requests per hour). It is important in production systems to prevent abuse, protect backend resources, and ensure fair usage across users. In a system like this, it also adds a security layer against brute-force attacks and excessive API consumption.
+- **APM** — APM tools such as Grafana (or similar observability platforms) provide real-time insights into system performance, including latency, error rates, and resource usage. In production, this would be essential for detecting bottlenecks, monitoring system health, and proactively identifying issues before they impact users.
+- **Pagination** — Instead of returning large datasets in a single request, pagination allows data to be delivered in smaller chunks. This improves performance, reduces database load, and enhances user experience by only fetching what is needed at a time, especially for lists like accounts, events, or auctions.
+- **Integration logs** — These logs track all interactions with external systems such as the CRM integration layer. They are critical for debugging synchronization issues, monitoring data consistency between systems, and ensuring traceability of external API calls in case of failures.
+- **Districtive analytics colors** — Using visual indicators (e.g. colors for metrics or analytics values) helps highlight anomalies, trends, or important thresholds in the system. This improves usability by making data interpretation faster and more intuitive for end users and administrators.
+- **Absolute max session age** — – Even if a refresh token is continuously rotated and valid, enforcing a hard maximum session duration (e.g. 30 days) ensures users are periodically re-authenticated. This improves security by limiting long-term session abuse and reducing risk from compromised tokens.
+- **Role selection in registration** — Allowing users to choose their own role during registration introduces a security risk, as it could lead to privilege escalation. Instead, roles should be assigned by administrators to ensure proper access control and maintain the integrity of the RBAC system.
+- **Manual account eligibility approval** — After document upload or account creation, an administrator manually reviews and approves the account before it becomes active. This introduces a human validation step, ensuring data quality, compliance, and preventing fraudulent or incomplete accounts from being used in the system.
+- **Password expiry mechanism** — – Enforcing periodic password changes (e.g. every 30 days) increases security by limiting the lifetime of potentially compromised credentials. This is especially important in systems handling sensitive financial or personal data, as it reduces long-term exposure risk.
+
 
