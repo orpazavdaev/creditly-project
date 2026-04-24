@@ -1,6 +1,6 @@
 # Creditly
 
-This project is a monorepo for a lending workflow prototype: internal staff manage **accounts** and **auctions**, while **bankers** participate in **blind** rate auctions without receiving customer-identifying data through the public API. The stack is **Express + Prisma + PostgreSQL** (API) and **Next.js App Router** (web), with an in-process event bus for reactions after persisted **`Event`** rows (account audit trail) and related bus notifications.
+This project is a monorepo for a lending workflow prototype: **internal staff manage accounts and auctions**, while bankers participate in blind rate auctions without receiving customer-identifying data through the public API. The stack is Express + Prisma + PostgreSQL (API) and Next.js App Router (web), with an in-process event bus for reactions after persisted `Event` rows (account audit trail) and related bus notifications.
 
 ---
 
@@ -17,7 +17,7 @@ Each package installs and runs independently. The browser talks to the API via `
 
 ## Getting started
 
-**Database**
+**Database** + **Backend**
 
 ```bash
 cd backend
@@ -82,18 +82,17 @@ Secrets and deployment-specific values live in **`.env`** files, not in git. Cop
 
 Backend-only: **`CRM_FAILURE_RATE`** (0–1) tunes how often **`MockCrmApiClient.push`** throws in development; omit to use the default **0.35**.
 
+---
 ## Architecture
 
 The backend follows a **layered** structure so HTTP, use cases, and persistence stay separated:
 
 - **`index.ts` / `app.ts`** — Process bootstrap: load env, register event-bus listeners once, create Express app, start jobs (for example refresh-token cleanup), listen on a port.
 - **`modules/`** — Route factories: mount paths, stack middleware (`authenticateJWT`, `requireRole` / `requireRoles`), delegate to controllers.
-- **`controllers/`** — Map HTTP to service calls; **path and query** inputs use **Zod** via **`parseParams`** / **`parseQuery`** where applicable (`validation/`).
+- **`controllers/`** — Map HTTP to service calls; path and query inputs use **Zod** via `parseParams` / `parseQuery` where applicable (`validation/`).
 - **`services/`** — Use cases and orchestration; **Zod** validates inbound JSON bodies where the service owns the contract (auth, events, open auction, submit offer).
 - **`repositories/`** — Prisma access and query shapes; keeps SQL/ORM details out of services.
-
-
-לפרט למה זה חשוב ומה היתרון - אולי לכתוב tradeoffs
+Using the Repository pattern is important because it creates a clear separation between business logic and data access, making the system easier to maintain, test, and evolve over time. It allows the application to remain independent of the underlying database or ORM (such as Prisma), enabling safer refactoring and easier mocking in tests. This abstraction becomes especially valuable as the system grows, helping enforce cleaner architecture and reducing tight coupling between layers.
 - **`mappers/`** — API-facing DTOs (for example stripping fields for banker responses).
 - **`event-bus/`** — Lightweight **in-process** pub/sub (`EventBus`: `on` / `emit`). Used for reactions after a row is written, not as a replacement for HTTP.
 - **`middleware/`** — Auth, errors, request context.
@@ -101,6 +100,8 @@ The backend follows a **layered** structure so HTTP, use cases, and persistence 
 - **`jobs/`** — Scheduled in-process tasks.
 
 The frontend uses the **App Router**, **React Query** for server state, a shared **`apiFetch`** helper, and **`AuthProvider`** for access tokens plus refresh via cookies.
+
+---
 
 ### UI screenshots
 ![My Image](./assets/1.png)
@@ -141,15 +142,9 @@ The frontend uses the **App Router**, **React Query** for server state, a shared
 
 Classes are used for **constructor injection**: each type holds its collaborators as **`private readonly`** fields. There is **no shared base class** for controllers, services, or repositories.
 
-**Where instances are wired**
-
-- **`createApp`** (`backend/src/app.ts`) — Builds repositories and services, attaches **one shared `EventBus`** (default **`appEventBus`**) to anything that publishes **`ACCOUNT_EVENT_CREATED`** notifications, nests **controllers → services → repositories** for each HTTP mount, and accepts an optional **`EventSideEffectService`** (with **`EventSideEffectRepository`**) for tests.
-- **`registerEventBusListeners`** (`backend/src/event-bus/register-listeners.ts`) — Creates **`AccountSyncRepository`**, **`MockCrmApiClient`**, **`CrmSyncService`**, and registers **`registerCrmOnAccountEventCreated`** plus the winning-offer listener (CRM runs **outside** `createApp` but uses the same bus singleton).
-- **`startRefreshTokenCleanupJob`** — Instantiates **`AuthRepository`** for expired refresh-token deletes.
-
 **Typical request flow**
 
-`modules/*` routes apply middleware, then call a **controller** method. The controller parses path/query, calls **one service** (or a small set), maps the result to JSON. The service enforces rules and RBAC helpers, calls **repositories** and sometimes **`EventBus`** / **`EventSideEffectService`**. Repositories are the only layer that use **Prisma** directly.
+`modules/*` routes apply middleware, then call a **controller** method. The controller parses path/query, calls **one service** (or a small set), maps the result to JSON. The service enforces rules and RBAC helpers, calls **repositories** and sometimes **EventBus** / **EventSideEffectService**. Repositories are the only layer that use **Prisma** directly.
 
 **Controllers** (HTTP adapter only; no Prisma)
 
@@ -228,6 +223,7 @@ The main tradeoff is reduced flexibility compared to NoSQL solutions: schema cha
 **Prisma** is used as the ORM (Object-Relational Mapping) layer between the application and the database, providing a type-safe and structured API instead of writing raw SQL queries. This improves developer productivity through auto-generated types, reduces runtime errors, and helps maintain consistency between the database schema and the application code. In addition, Prisma adds a layer of security by preventing common vulnerabilities such as SQL injection, since queries are parameterized by default and not constructed manually.
 
 ![My Image](./assets/schemaERD.png)
+
 ---
 
 ## Role-based access control (RBAC)
@@ -267,7 +263,7 @@ Together, RBAC is **defense in depth**: route guards for coarse role boundaries,
 The **blind** auction model was chosen to ensure fairness and reduce bias between participants by preventing them from seeing each other’s offers during the bidding process. This approach encourages more realistic and independent pricing, since each user submits their offer without being influenced by competitors’ bids or strategic manipulation. In the context of Creditly, where financial decisions and account evaluations are involved, this model helps create a more objective and trustworthy selection process for the winning offer, while also simplifying the logic of comparison since all bids are revealed only at the decision stage.
 
 **What bankers see**
-להסביר למה בחרתי בערכים בemum של classification
+
 
 - **Auction list** (`GET /auctions`) returns only **`OPEN`** opportunities whose **`classification`** is in the banker’s **`specialisation`** array (assignment: bankers see **open**, eligible auctions only). Rows include **`id`**, **`classification`**, **`status`**, **`openedAt`**, **`expiresAt`**, **`closedAt`** — no `accountId`, no customer contact fields (`banker-auction-list.mapper`).
 - **Offer submission** persists internally with `accountId` for integrity, but the **HTTP response** maps the related event through **`mapBankerSubmitOfferResponse`**, which **omits `accountId`** from the `event` object returned to the client.
@@ -283,45 +279,69 @@ The database still stores foreign keys linking offers to accounts; **blindness i
 ---
 
 ## Event-driven design
-להסביר למה זה היה נכון ארכיטקטונית להשתמש בזה שם.
+The system uses an event-driven architecture to decouple core business actions from their side effects. Instead of handling everything synchronously (e.g. updating the database, triggering CRM sync, and logging within the same flow), the application emits events such as offer_submitted or document_uploaded, and separate listeners handle the required follow-up actions. This makes the system more modular, easier to extend, and more maintainable, since new behaviors can be added without changing existing logic. In a project like this, this is especially useful for handling integrations and background processes, while keeping the main request flow simple and responsive.
+
 Two related concepts coexist:
 
-1. **Persisted `Event` rows** — The audit **timeline** per account. Created through **`EventService`** (and other flows that write events). **`userId` on the row always comes from the authenticated user**, never from an untrusted body field.
+The system uses two complementary mechanisms: persisted events for auditability, and an in-process event bus for asynchronous side effects.
 
-2. **In-process `EventBus`** — After the row is written and **synchronous** side-effect rules complete, **`publishAccountEventCreated`** emits topic **`ACCOUNT_EVENT_CREATED`** (wire value **`event.created`**) with an **`AccountEventCreatedPayload`** so subscribers can run **without** bloating the HTTP handler.
+Persisted Event rows represent the audit timeline of each account. These are written to the database via EventService (and other flows), and serve as the single source of truth for historical actions. The userId is always derived from the authenticated user context, ensuring that no untrusted input can affect audit data.
+
+In-process EventBus is used to trigger asynchronous workflows after the main operation completes. Once an event is persisted and all synchronous business rules are applied, publishAccountEventCreated emits an ACCOUNT_EVENT_CREATED event (wire value: event.created) with an AccountEventCreatedPayload. This allows subscribers to react without overloading the HTTP request lifecycle.
 
 **Order of operations (staff-created events via `POST /events`)**
 
-- Persist the `Event` row.
-- Run **`EventSideEffectService.applyOnEventCreated`** in **`EventService`** (same request): account readiness after **`DOCUMENT_UPLOADED`**, high-activity window, and any other rules tied to the new event type.
-- Emit **`ACCOUNT_EVENT_CREATED`** for **asynchronous** subscribers only (today: **`MockCrmApiClient`** via **`CrmSyncService`** for eligible types).
-- When **`DOCUMENT_UPLOADED`** moves an account from **`NEW` → `READY_FOR_AUCTION`**, **`EventSideEffectService`** also persists a **`STATUS_CHANGED`** `Event` row and emits another **`ACCOUNT_EVENT_CREATED`** (CRM may run twice in that request: upload, then status change). After an auction win, it similarly records **`STATUS_CHANGED`** for **`AUCTION_OPEN` → `WON`** before the winning-offer bus topic fires.
+The Event row is persisted in the database.
+EventSideEffectService.applyOnEventCreated runs synchronously within EventService to handle immediate business rules (e.g. updating account readiness after DOCUMENT_UPLOADED, tracking high activity).
+The system emits ACCOUNT_EVENT_CREATED for asynchronous subscribers (currently CRM sync via CrmSyncService).
 
-**Listeners** (registered in **`registerEventBusListeners`** before the app accepts traffic):
+In certain cases, additional events are generated automatically:
 
-- **`ACCOUNT_EVENT_CREATED`** — **`CrmSyncService.handleAfterAccountEventCreated`** for **`DOCUMENT_UPLOADED`**, **`STATUS_CHANGED`**, and **`AUCTION_OPENED`** only (other types no-op). Failures set **`syncStatus`** / **`failureReason`** on the account.
-- **`winning.offer.selected`** — **`CrmSyncService.handleWinningOfferSelected`** after a winning offer is recorded.
+When DOCUMENT_UPLOADED transitions an account from NEW to READY_FOR_AUCTION, a new STATUS_CHANGED event is persisted and emitted.
+After a winning offer is selected, a STATUS_CHANGED event (AUCTION_OPEN → WON) is recorded before triggering the dedicated winning-offer event.
 
-**Trade-off:** handlers run **after** the HTTP response path has committed the primary write; failures in subscribers are logged but do not roll back the `Event` row. See Assumptions and trade-offs.
+**Event listeners** 
+
+Listeners are registered at application startup (registerEventBusListeners) and handle specific event types:
+
+ACCOUNT_EVENT_CREATED → handled by CrmSyncService.handleAfterAccountEventCreated for selected event types (DOCUMENT_UPLOADED, STATUS_CHANGED, AUCTION_OPENED). Other events are ignored.
+winning.offer.selected → handled by CrmSyncService.handleWinningOfferSelected after a winning offer is recorded.
+
+Failures in these flows update syncStatus and failureReason on the account.
+
+**Trade-off** 
+
+Event handlers run asynchronously after the main HTTP flow completes and the primary data is already persisted. This improves performance and keeps request handling fast, but introduces eventual consistency: if a subscriber fails (e.g. CRM sync), the main operation is not rolled back. Instead, failures are logged and tracked for later handling.
 
 ---
 
 ## CRM outbound integration (mock)
 
-**Layers**
+**CRM Integration Design (with Dependency Injection)**
 
-- **`CrmApiClient`** (`integration/crm/mock-crm-api.client.ts`) — Small interface: **`push(accountId, ctx)`** returns a **`Promise`**. A real deployment would swap **`MockCrmApiClient`** for an HTTP client (Salesforce, HubSpot, internal CRM API) without changing **`CrmSyncService`**.
-- **`MockCrmApiClient`** — Async **`push`** (yields on **`Promise.resolve()`** then may throw). Failure probability comes from **`CRM_FAILURE_RATE`** (see **`backend/.env.example`**; default **0.35** when unset). **`CrmSyncService`** does not read that env var; only the mock does.
-- **`CrmSyncService`** — Application orchestration: filters account-event payloads with **`TRIGGER_EVENTS`**, builds a **`ctx`** string for logs and error messages, calls **`crmClient.push`**, then **`AccountSyncRepository`** **`markSynced`** / **`markFailed`**. Shared **`syncAccount`** implements one try/catch path so success and failure handling are not duplicated.
-- **Event bus** — Listeners invoke **`CrmSyncService`** only; they never call **`MockCrmApiClient`** directly.
+The CRM integration is designed using Dependency Injection (DI) to decouple the business logic from the actual implementation of the CRM client.
+
+Dependency Injection (DI) is used with the CRM mock service to decouple the integration layer from a specific implementation. Instead of tightly coupling the system to a concrete CRM client, the service depends on an abstract interface, allowing the crmPushMock to be injected during development and testing. This makes the system easier to test, replace, and extend—for example, switching to a real CRM integration in production without changing the core business logic. It also improves code organization and aligns with clean architecture principles by separating external dependencies from the domain layer.
+
+**CrmApiClient** defines a minimal interface with a single method `push(accountId, ctx)` that returns a Promise. The system depends only on this interface, not on a specific implementation. This allows replacing the mock with a real HTTP-based client (e.g. Salesforce, HubSpot, or an internal CRM API) without changing the application logic.
+
+**MockCrmApiClient** is a development/testing implementation of this interface. It simulates asynchronous behavior and randomly fails based on a configurable `CRM_FAILURE_RATE`. This makes it possible to test failure scenarios and system resilience without relying on an external service.
+
+**CrmSyncService** contains the actual orchestration logic. It receives a `crmClient` via DI and is responsible for:
+
+Filtering relevant events (`TRIGGER_EVENTS`)
+Building a context (`ctx`) for logging and debugging
+Calling `crmClient.push`
+Updating sync status in the database (success/failure)
+
+All logic is centralized in a shared `syncAccoun`t method to avoid duplication and ensure consistent handling.
+
+**Event bus integration** ensures that listeners interact only with `CrmSyncService`, never directly with the CRM client implementation. This keeps the system loosely coupled and aligned with clean architecture principles.
+
+For events like `winning.offer.selected`, the same `syncAccount` flow is reused with a different context, ensuring consistency and avoiding redundant code.
 
 
-
-For **`winning.offer.selected`**, the same **`syncAccount`** path runs with **`ctx`** in the form **`winning_offer_selected:`** plus the winning offer id.
-
-להסביר את השימוש בDI פה. 
-
-
+---
 ## Token strategy
 
 להשלים תרשים ולהסביר את הflow
@@ -335,7 +355,7 @@ For **`winning.offer.selected`**, the same **`syncAccount`** path runs with **`c
 
 **Login** returns `{ accessToken, expiresIn }` and sets the refresh cookie. **Refresh** (`AuthService.refresh`) reads the cookie, resolves the matching **`RefreshToken`** row, **rotates** the refresh material, and returns a new access token. **Register** does not start a session (no tokens), so “identity exists” and “session started” stay distinct.
 
-**Client guidance:** keep access tokens in **memory** where possible; avoid `localStorage` for refresh material because the cookie is already HttpOnly. **CORS** uses **`credentials: true`** and a configured **`CORS_ORIGIN`** so browsers send cookies only to the intended API origin.
+
 
 ### Refresh token rotation (what it means here)
 
@@ -436,9 +456,10 @@ This repository ships **`prisma/schema.prisma`** and uses **`prisma db push`** (
 - **Pagination** — Instead of returning large datasets in a single request, pagination allows data to be delivered in smaller chunks. This improves performance, reduces database load, and enhances user experience by only fetching what is needed at a time, especially for lists like accounts, events, or auctions.
 - **Integration logs** — These logs track all interactions with external systems such as the CRM integration layer. They are critical for debugging synchronization issues, monitoring data consistency between systems, and ensuring traceability of external API calls in case of failures.
 - **Districtive analytics colors** — Using visual indicators (e.g. colors for metrics or analytics values) helps highlight anomalies, trends, or important thresholds in the system. This improves usability by making data interpretation faster and more intuitive for end users and administrators.
-- **Absolute max session age** — – Even if a refresh token is continuously rotated and valid, enforcing a hard maximum session duration (e.g. 30 days) ensures users are periodically re-authenticated. This improves security by limiting long-term session abuse and reducing risk from compromised tokens.
+- **Absolute max session age** — Even if a refresh token is continuously rotated and valid, enforcing a hard maximum session duration (e.g. 30 days) ensures users are periodically re-authenticated. This improves security by limiting long-term session abuse and reducing risk from compromised tokens.
 - **Role selection in registration** — Allowing users to choose their own role during registration introduces a security risk, as it could lead to privilege escalation. Instead, roles should be assigned by administrators to ensure proper access control and maintain the integrity of the RBAC system.
 - **Manual account eligibility approval** — After document upload or account creation, an administrator manually reviews and approves the account before it becomes active. This introduces a human validation step, ensuring data quality, compliance, and preventing fraudulent or incomplete accounts from being used in the system.
-- **Password expiry mechanism** — – Enforcing periodic password changes (e.g. every 30 days) increases security by limiting the lifetime of potentially compromised credentials. This is especially important in systems handling sensitive financial or personal data, as it reduces long-term exposure risk.
+- **Password expiry mechanism** — Enforcing periodic password changes (e.g. every 30 days) increases security by limiting the lifetime of potentially compromised credentials. This is especially important in systems handling sensitive financial or personal data, as it reduces long-term exposure risk.
+- **Logs** - In a production system, I would extend the current basic logging into a structured and centralized logging strategy. This would include using structured logs (e.g. JSON format) with consistent fields such as requestId, userId, event type, and timestamps, enabling easier tracing across the system. Logs would be aggregated into a centralized platform (e.g. ELK stack or similar) to allow searching, monitoring, and alerting. I would also differentiate log levels (info, warn, error, debug) and add correlation between requests and background processes (such as event handling or CRM sync), so issues can be traced end-to-end. The goal is to improve observability, simplify debugging in distributed flows, and provide better visibility into system behavior under real production load.
 
 
