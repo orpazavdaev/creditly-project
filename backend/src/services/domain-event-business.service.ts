@@ -1,6 +1,7 @@
-import { AuctionOpportunityStatus, EventType } from "@prisma/client";
+import { AccountStatus, AuctionOpportunityStatus, EventType } from "@prisma/client";
 import type { DomainEventCreatedPayload } from "../event-bus/domain-events.js";
 import type { EventBus } from "../event-bus/event-bus.js";
+import { publishEventCreated } from "../event-bus/publish-domain-event.js";
 import {
   WINNING_OFFER_SELECTED_TOPIC,
   type WinningOfferSelectedPayload,
@@ -16,10 +17,19 @@ export class DomainEventBusinessService {
   ) {}
 
   async applyOnEventCreated(payload: DomainEventCreatedPayload): Promise<void> {
-    const { type, accountId } = payload;
+    const { type, accountId, userId } = payload;
 
     if (type === EventType.DOCUMENT_UPLOADED) {
-      await this.repo.updateAccountDocumentState(accountId, new Date());
+      const changed = await this.repo.updateAccountDocumentState(accountId, new Date());
+      if (changed) {
+        const statusChanged = await this.repo.createStatusChangedEvent({
+          accountId,
+          userId,
+          fromStatus: AccountStatus.NEW,
+          toStatus: AccountStatus.READY_FOR_AUCTION,
+        });
+        publishEventCreated(this.bus, statusChanged);
+      }
     }
 
     const since = new Date(Date.now() - DAY_MS);
@@ -45,6 +55,14 @@ export class DomainEventBusinessService {
       }
       const best = offers[0];
       await this.repo.closeAuctionAndMarkAccountWon(auction.id, accountId, best.id, closedAt);
+      const statusChanged = await this.repo.createStatusChangedEvent({
+        accountId,
+        userId,
+        fromStatus: AccountStatus.AUCTION_OPEN,
+        toStatus: AccountStatus.WON,
+        metadata: { auctionId: auction.id, winningOfferId: best.id },
+      });
+      publishEventCreated(this.bus, statusChanged);
       const winningPayload: WinningOfferSelectedPayload = {
         accountId,
         auctionId: auction.id,

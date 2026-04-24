@@ -28,7 +28,7 @@ enum AccountStatus {
 }
 
 enum SyncStatus {
-  SUCCESS
+  SYNCED
   FAILED
 }
 

@@ -1,19 +1,42 @@
 import {
   AccountStatus,
   AuctionOpportunityStatus,
+  EventType,
   type AuctionOpportunity,
   type BankOffer,
+  type Event,
 } from "@prisma/client";
 import { prisma } from "./prisma.js";
 
 export class DomainEventBusinessRepository {
-  updateAccountDocumentState(accountId: string, lastActivity: Date): Promise<void> {
+  updateAccountDocumentState(accountId: string, lastActivity: Date): Promise<boolean> {
     return prisma.account
       .updateMany({
         where: { id: accountId, status: AccountStatus.NEW },
         data: { status: AccountStatus.READY_FOR_AUCTION, lastActivity },
       })
-      .then(() => undefined);
+      .then((result) => result.count > 0);
+  }
+
+  createStatusChangedEvent(data: {
+    accountId: string;
+    userId: string;
+    fromStatus: AccountStatus;
+    toStatus: AccountStatus;
+    metadata?: Record<string, unknown>;
+  }): Promise<Event> {
+    return prisma.event.create({
+      data: {
+        accountId: data.accountId,
+        userId: data.userId,
+        type: EventType.STATUS_CHANGED,
+        metadata: {
+          fromStatus: data.fromStatus,
+          toStatus: data.toStatus,
+          ...(data.metadata ?? {}),
+        },
+      },
+    });
   }
 
   countEventsSince(accountId: string, since: Date): Promise<number> {

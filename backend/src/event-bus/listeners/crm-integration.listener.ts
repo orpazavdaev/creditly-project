@@ -1,11 +1,11 @@
 import type { EventBus } from "../event-bus.js";
-import type { CrmService } from "../../services/crm.service.js";
+import type { CrmIntegrationService } from "../../integration/crm-integration.service.js";
 import type { WinningOfferSelectedPayload } from "../crm-integration-events.js";
 
 export function registerCrmWinningOfferListener(
   bus: EventBus,
   topic: string,
-  crm: CrmService
+  crm: CrmIntegrationService
 ): void {
   bus.on(topic, (payload: WinningOfferSelectedPayload) => {
     void crm.handleWinningOfferSelected(payload).catch((err) => {

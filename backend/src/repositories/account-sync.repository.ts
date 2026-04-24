@@ -2,11 +2,11 @@ import { SyncStatus } from "@prisma/client";
 import { prisma } from "./prisma.js";
 
 export class AccountSyncRepository {
-  markSuccess(accountId: string): Promise<void> {
+  markSynced(accountId: string): Promise<void> {
     return prisma.account
       .update({
         where: { id: accountId },
-        data: { syncStatus: SyncStatus.SUCCESS, failureReason: null },
+        data: { syncStatus: SyncStatus.SYNCED, failureReason: null },
       })
       .then(() => undefined);
   }

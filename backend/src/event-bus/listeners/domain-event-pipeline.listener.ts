@@ -1,8 +1,11 @@
 import { DOMAIN_EVENT_CREATED, type DomainEventCreatedPayload } from "../domain-events.js";
 import type { EventBus } from "../event-bus.js";
-import type { CrmService } from "../../services/crm.service.js";
+import type { CrmIntegrationService } from "../../integration/crm-integration.service.js";
 
-export function registerDomainEventCreatedPipeline(bus: EventBus, crm: CrmService): void {
+export function registerDomainEventCreatedPipeline(
+  bus: EventBus,
+  crm: CrmIntegrationService
+): void {
   bus.on(DOMAIN_EVENT_CREATED, (payload: DomainEventCreatedPayload) => {
     void (async () => {
       try {

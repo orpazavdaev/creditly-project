@@ -38,7 +38,7 @@ export class AnalyticsRepository {
       prisma.account.count({ where: accountWhere }),
       prisma.account.count({ where: { ...accountWhere, status: AccountStatus.WON } }),
       prisma.account.count({ where: { ...accountWhere, isHighActivity: true } }),
-      prisma.account.count({ where: { ...accountWhere, syncStatus: SyncStatus.SUCCESS } }),
+      prisma.account.count({ where: { ...accountWhere, syncStatus: SyncStatus.SYNCED } }),
       prisma.account.count({ where: { ...accountWhere, syncStatus: SyncStatus.FAILED } }),
       prisma.auctionOpportunity.count({ where: auctionWhere }),
       prisma.auctionOpportunity.count({ where: { ...auctionWhere, status: AuctionOpportunityStatus.OPEN } }),

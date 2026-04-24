@@ -109,7 +109,7 @@ export class AccountRepository {
           status: AccountStatus.NEW,
           lastActivity: new Date(),
           isHighActivity: false,
-          syncStatus: SyncStatus.SUCCESS,
+          syncStatus: SyncStatus.SYNCED,
         },
         select: { id: true },
       });

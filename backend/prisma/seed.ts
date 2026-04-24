@@ -144,7 +144,7 @@ async function main(): Promise<void> {
       status: "WON",
       lastActivity: daysAgo(2),
       isHighActivity: true,
-      syncStatus: "SUCCESS",
+      syncStatus: "SYNCED",
       failureReason: null,
     },
   });
@@ -157,7 +157,7 @@ async function main(): Promise<void> {
       status: "AUCTION_OPEN",
       lastActivity: daysAgo(1),
       isHighActivity: true,
-      syncStatus: "SUCCESS",
+      syncStatus: "SYNCED",
       failureReason: null,
     },
   });
@@ -196,7 +196,7 @@ async function main(): Promise<void> {
       status: "NEW",
       lastActivity: daysAgo(10),
       isHighActivity: false,
-      syncStatus: "SUCCESS",
+      syncStatus: "SYNCED",
       failureReason: null,
     },
   });
@@ -209,7 +209,7 @@ async function main(): Promise<void> {
       status: "WON",
       lastActivity: daysAgo(4),
       isHighActivity: true,
-      syncStatus: "SUCCESS",
+      syncStatus: "SYNCED",
       failureReason: null,
     },
   });
@@ -235,7 +235,7 @@ async function main(): Promise<void> {
       status: "AUCTION_OPEN",
       lastActivity: daysAgo(1),
       isHighActivity: true,
-      syncStatus: "SUCCESS",
+      syncStatus: "SYNCED",
       failureReason: null,
     },
   });

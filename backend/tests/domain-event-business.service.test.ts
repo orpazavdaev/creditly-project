@@ -8,7 +8,19 @@ import type { EventBus } from "../src/event-bus/event-bus.js";
 
 function baseRepo(): Record<keyof DomainEventBusinessRepository, ReturnType<typeof vi.fn>> {
   return {
-    updateAccountDocumentState: vi.fn().mockResolvedValue(undefined),
+    updateAccountDocumentState: vi.fn().mockResolvedValue(true),
+    createStatusChangedEvent: vi.fn().mockImplementation(async (data) => ({
+      id: "ev-status",
+      accountId: data.accountId,
+      userId: data.userId,
+      type: "STATUS_CHANGED",
+      createdAt: new Date(),
+      metadata: {
+        fromStatus: data.fromStatus,
+        toStatus: data.toStatus,
+        ...(data.metadata ?? {}),
+      },
+    })),
     countEventsSince: vi.fn().mockResolvedValue(0),
     updateAccountHighActivity: vi.fn().mockResolvedValue(undefined),
     findAuctionWithOffersByAccountId: vi.fn().mockResolvedValue(null),
@@ -207,5 +219,13 @@ describe("DomainEventBusinessService auction close", () => {
     });
 
     expect(repoFns.updateAccountDocumentState).toHaveBeenCalledWith("acc1", expect.any(Date));
+    expect(repoFns.createStatusChangedEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accountId: "acc1",
+        userId: "u1",
+        fromStatus: "NEW",
+        toStatus: "READY_FOR_AUCTION",
+      })
+    );
   });
 });

@@ -27,7 +27,7 @@ describe("AccountListService getById", () => {
         status: "NEW",
         lastActivity: new Date(),
         isHighActivity: false,
-        syncStatus: "SUCCESS",
+        syncStatus: "SYNCED",
         failureReason: null,
         createdAt: new Date(),
         auctionOpportunity: null,
