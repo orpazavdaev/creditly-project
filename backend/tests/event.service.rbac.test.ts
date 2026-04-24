@@ -4,20 +4,20 @@ import { HttpError } from "../src/utils/http-error.js";
 import type { EventRepository } from "../src/repositories/event.repository.js";
 import type { EventBus } from "../src/event-bus/event-bus.js";
 import type { AccountAccessService } from "../src/services/account-access.service.js";
-import type { DomainEventBusinessService } from "../src/services/domain-event-business.service.js";
+import type { EventSideEffectService } from "../src/services/event-side-effect.service.js";
 
-const domainEventBusiness = {
+const eventSideEffects = {
   applyOnEventCreated: vi.fn().mockResolvedValue(undefined),
-} as unknown as DomainEventBusinessService;
+} as unknown as EventSideEffectService;
 
-describe("EventService RBAC for timeline writes", () => {
+describe("EventService RBAC for account event writes", () => {
   it("forbids MANAGER from creating NOTE_ADDED", async () => {
     const repo = { create: vi.fn() } as unknown as EventRepository;
     const bus = { emit: vi.fn() } as unknown as EventBus;
     const access = {
       assertStaffCanAccessAccount: vi.fn().mockResolvedValue(undefined),
     } as unknown as AccountAccessService;
-    const svc = new EventService(repo, bus, access, domainEventBusiness);
+    const svc = new EventService(repo, bus, access, eventSideEffects);
 
     await expect(
       svc.create(
@@ -40,7 +40,7 @@ describe("EventService RBAC for timeline writes", () => {
     const access = {
       assertStaffCanAccessAccount: vi.fn().mockResolvedValue(undefined),
     } as unknown as AccountAccessService;
-    const svc = new EventService(repo, bus, access, domainEventBusiness);
+    const svc = new EventService(repo, bus, access, eventSideEffects);
 
     await expect(
       svc.create(
@@ -66,7 +66,7 @@ describe("EventService RBAC for timeline writes", () => {
     const access = {
       assertStaffCanAccessAccount: vi.fn().mockResolvedValue(undefined),
     } as unknown as AccountAccessService;
-    const svc = new EventService(repo, bus, access, domainEventBusiness);
+    const svc = new EventService(repo, bus, access, eventSideEffects);
 
     const out = await svc.create(
       { id: "u1", email: "u@x.com", role: "USER" },
@@ -86,7 +86,7 @@ describe("EventService RBAC for timeline writes", () => {
     const access = {
       assertStaffCanAccessAccount: vi.fn().mockResolvedValue(undefined),
     } as unknown as AccountAccessService;
-    const svc = new EventService(repo, bus, access, domainEventBusiness);
+    const svc = new EventService(repo, bus, access, eventSideEffects);
 
     await expect(svc.listByAccount({ id: "m1", email: "m@x.com", role: "MANAGER" }, "acc1")).rejects.toMatchObject({
       status: 403,
@@ -114,7 +114,7 @@ describe("EventService RBAC for timeline writes", () => {
     const access = {
       assertStaffCanAccessAccount: vi.fn().mockResolvedValue(undefined),
     } as unknown as AccountAccessService;
-    const svc = new EventService(repo, bus, access, domainEventBusiness);
+    const svc = new EventService(repo, bus, access, eventSideEffects);
 
     const out = await svc.listByAccount({ id: "u1", email: "u@x.com", role: "USER" }, "acc1");
     expect(out.events).toHaveLength(1);
@@ -151,7 +151,7 @@ describe("EventService RBAC for timeline writes", () => {
     const access = {
       assertStaffCanAccessAccount: vi.fn().mockResolvedValue(undefined),
     } as unknown as AccountAccessService;
-    const svc = new EventService(repo, bus, access, domainEventBusiness);
+    const svc = new EventService(repo, bus, access, eventSideEffects);
 
     const out = await svc.listByAccount({ id: "a1", email: "a@x.com", role: "ADMIN" }, "acc1");
     expect(out.events).toHaveLength(2);

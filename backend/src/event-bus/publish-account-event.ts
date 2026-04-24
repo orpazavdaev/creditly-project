@@ -1,9 +1,9 @@
 import type { Event } from "@prisma/client";
 import type { EventBus } from "./event-bus.js";
-import { DOMAIN_EVENT_CREATED, type DomainEventCreatedPayload } from "./domain-events.js";
+import { ACCOUNT_EVENT_CREATED, type AccountEventCreatedPayload } from "./account-events.js";
 import { eventTypeToApi } from "../utils/event-type-api.js";
 
-export function toDomainEventCreatedPayload(row: Event): DomainEventCreatedPayload {
+export function toAccountEventCreatedPayload(row: Event): AccountEventCreatedPayload {
   return {
     id: row.id,
     accountId: row.accountId,
@@ -15,6 +15,6 @@ export function toDomainEventCreatedPayload(row: Event): DomainEventCreatedPaylo
   };
 }
 
-export function publishEventCreated(bus: EventBus, row: Event): void {
-  bus.emit(DOMAIN_EVENT_CREATED, toDomainEventCreatedPayload(row));
+export function publishAccountEventCreated(bus: EventBus, row: Event): void {
+  bus.emit(ACCOUNT_EVENT_CREATED, toAccountEventCreatedPayload(row));
 }

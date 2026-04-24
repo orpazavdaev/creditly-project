@@ -1,6 +1,6 @@
 # Creditly
 
-Creditly is a monorepo for a lending workflow prototype: internal staff manage **accounts** and **auctions**, while **bankers** participate in **blind** rate auctions without receiving customer-identifying data through the public API. The stack is **Express + Prisma + PostgreSQL** (API) and **Next.js App Router** (web), with an in-process event bus for reactions after domain events are persisted.
+This project is a monorepo for a lending workflow prototype: internal staff manage **accounts** and **auctions**, while **bankers** participate in **blind** rate auctions without receiving customer-identifying data through the public API. The stack is **Express + Prisma + PostgreSQL** (API) and **Next.js App Router** (web), with an in-process event bus for reactions after domain events are persisted.
 
 ---
 
@@ -27,24 +27,24 @@ The backend follows a **layered** structure so HTTP, use cases, and persistence 
 - **`mappers/`** — API-facing DTOs (for example stripping fields for banker responses).
 - **`event-bus/`** — Lightweight **in-process** pub/sub (`EventBus`: `on` / `emit`). Used for reactions after a row is written, not as a replacement for HTTP.
 - **`middleware/`** — Auth, errors, request context.
-- **Outbound integrations** — `src/integration/crm-mock.ts` defines **`CrmOutboundClient`** (contract) and **`CrmMockOutbound`** (simulated HTTP with configurable failure rate). **`CrmIntegrationService`** depends on that interface only; **`registerEventBusListeners`** wires the mock. No controller imports the integration layer directly.
+- **`integration/crm/`** — **`CrmApiClient`** type and **`MockCrmApiClient`** (`mock-crm-api.client.ts`); **`CrmSyncService`** (`crm-sync.service.ts`) orchestrates pushes and account sync state. **`registerEventBusListeners`** wires the mock and listeners; controllers do not import this layer directly.
 - **`jobs/`** — Scheduled in-process tasks.
 
 The frontend uses the **App Router**, **React Query** for server state, a shared **`apiFetch`** helper, and **`AuthProvider`** for access tokens plus refresh via cookies.
 
 ### Backend class reference, roles, and relationships
 
-Classes are used for **constructor injection**: each type holds its collaborators as **`private readonly`** fields. There is **no shared base class** for controllers, services, or repositories. **Inheritance** appears only on **`HttpError extends Error`** and **`CrmMockOutbound implements CrmOutboundClient`** (interface substitution for **`CrmIntegrationService`**).
+Classes are used for **constructor injection**: each type holds its collaborators as **`private readonly`** fields. There is **no shared base class** for controllers, services, or repositories. **Inheritance** appears only on **`HttpError extends Error`** and **`MockCrmApiClient implements CrmApiClient`** (interface substitution for **`CrmSyncService`**).
 
 **Where instances are wired**
 
-- **`createApp`** (`backend/src/app.ts`) — Builds repositories and services, attaches **one shared `EventBus`** (default **`appEventBus`**) to anything that publishes domain events, nests **controllers → services → repositories** for each HTTP mount, and accepts an optional **`DomainEventBusinessService`** for tests.
-- **`registerEventBusListeners`** (`backend/src/event-bus/register-listeners.ts`) — Creates **`AccountSyncRepository`**, **`CrmMockOutbound`**, **`CrmIntegrationService`**, and registers bus listeners (CRM runs **outside** `createApp` but uses the same bus singleton).
+- **`createApp`** (`backend/src/app.ts`) — Builds repositories and services, attaches **one shared `EventBus`** (default **`appEventBus`**) to anything that publishes domain events, nests **controllers → services → repositories** for each HTTP mount, and accepts an optional **`EventSideEffectService`** for tests.
+- **`registerEventBusListeners`** (`backend/src/event-bus/register-listeners.ts`) — Creates **`AccountSyncRepository`**, **`MockCrmApiClient`**, **`CrmSyncService`**, and registers **`registerCrmOnAccountEventCreated`** plus the winning-offer listener (CRM runs **outside** `createApp` but uses the same bus singleton).
 - **`startRefreshTokenCleanupJob`** — Instantiates **`AuthRepository`** for expired refresh-token deletes.
 
 **Typical request flow**
 
-`modules/*` routes apply middleware, then call a **controller** method. The controller parses path/query, calls **one service** (or a small set), maps the result to JSON. The service enforces rules and RBAC helpers, calls **repositories** and sometimes **`EventBus`** / **`DomainEventBusinessService`**. Repositories are the only layer that use **Prisma** directly.
+`modules/*` routes apply middleware, then call a **controller** method. The controller parses path/query, calls **one service** (or a small set), maps the result to JSON. The service enforces rules and RBAC helpers, calls **repositories** and sometimes **`EventBus`** / **`EventSideEffectService`**. Repositories are the only layer that use **Prisma** directly.
 
 **Controllers** (HTTP adapter only; no Prisma)
 
@@ -69,13 +69,13 @@ Classes are used for **constructor injection**: each type holds its collaborator
 | **`AccountAccessService`** | **`assertStaffCanAccessAccount`** and manager/admin variants; uses **`AccountRepository`** for lookups and assignment checks. |
 | **`AccountListService`** | Scoped **`GET /accounts`** and **`GET /accounts/:id`**; combines **`AccountRepository`**, **`AccountAccessService`**, **`AuctionLifecycleRepository`** for summaries. |
 | **`AccountCreateService`** | Creates accounts (and optional linked user); **`AccountRepository`** + **`AuthRepository`**. |
-| **`AccountAuctionService`** | Opens an auction for an account (events, lifecycle, **`DomainEventBusinessService`**, **`EventBus`**). |
+| **`AccountAuctionService`** | Opens an auction for an account (events, lifecycle, **`EventSideEffectService`**, **`EventBus`**). |
 | **`AuctionBrowseService`** | Resolves auction list rows for staff vs banker (with **`AuctionBrowseRepository`** and lifecycle expiry helpers). |
-| **`AuctionCloseService`** | Manager/admin close path: lifecycle writes, **`AUCTION_CLOSED`** event, **`DomainEventBusinessService`**, then **`publishEventCreated`**. |
-| **`AuctionOfferService`** | Banker submit offer: validation, **`AuctionOfferRepository`**, lifecycle expiry, **`DomainEventBusinessService`**, **`EventBus`**. |
-| **`EventService`** | Staff event create/list: **`EventRepository`**, **`AccountAccessService`**, **`DomainEventBusinessService`**, **`EventBus`**. |
-| **`DomainEventBusinessService`** | Central **synchronous** reactions after a persisted **`Event`**: account status, high activity, auction win/expire side effects; uses **`DomainEventBusinessRepository`** and may **`emit`** winning-offer topic on the bus. |
-| **`CrmIntegrationService`** | **Asynchronous** CRM orchestration from bus listeners only: calls injected **`CrmOutboundClient`**, then **`AccountSyncRepository`** for sync state. |
+| **`AuctionCloseService`** | Manager/admin close path: lifecycle writes, **`AUCTION_CLOSED`** event, **`EventSideEffectService`**, then **`publishAccountEventCreated`**. |
+| **`AuctionOfferService`** | Banker submit offer: validation, **`AuctionOfferRepository`**, lifecycle expiry, **`EventSideEffectService`**, **`EventBus`**. |
+| **`EventService`** | Staff event create/list: **`EventRepository`**, **`AccountAccessService`**, **`EventSideEffectService`**, **`EventBus`**. |
+| **`EventSideEffectService`** | Central **synchronous** reactions after a persisted **`Event`**: account status, high activity, auction win/expire side effects; uses **`EventSideEffectRepository`** and may **`emit`** winning-offer topic on the bus. |
+| **`CrmSyncService`** | **Asynchronous** CRM orchestration from bus listeners only (implementation in **`integration/crm/crm-sync.service.ts`**): calls injected **`CrmApiClient`**, then **`AccountSyncRepository`** for sync state. |
 
 **Repositories** (persistence only)
 
@@ -91,27 +91,31 @@ Classes are used for **constructor injection**: each type holds its collaborator
 | **`AuctionBrowseRepository`** | Queries behind banker/staff auction lists. |
 | **`AuctionOfferRepository`** | Offer persistence and banker-scoped reads for submit/list. |
 | **`EventRepository`** | Append and read **`Event`** rows. |
-| **`DomainEventBusinessRepository`** | Multi-step Prisma updates for business rules triggered by event types (account state, offers, auctions). |
+| **`EventSideEffectRepository`** | Multi-step Prisma updates for business rules triggered by event types (account state, offers, auctions). |
 
 **Infrastructure and errors**
 
 | Class | Responsibility |
 | -------- | ---------------- |
-| **`EventBus`** | In-process **`on` / `emit`**; shared across **`createApp`**, **`DomainEventBusinessService`**, and **`registerEventBusListeners`**. |
-| **`CrmMockOutbound`** | Implements **`CrmOutboundClient`**: simulated async CRM push with configurable failure rate. |
+| **`EventBus`** | In-process **`on` / `emit`**; shared across **`createApp`**, **`EventSideEffectService`**, and **`registerEventBusListeners`**. |
+| **`MockCrmApiClient`** | Implements **`CrmApiClient`**: simulated async CRM push with configurable failure rate. |
 | **`HttpError`** | **`extends Error`**: typed **`status`** and **`code`** for the global error middleware. |
 
 **Relationship sketch (composition, not inheritance)**
 
 - **Controllers** depend only on **services** (and sometimes env for routers). They do **not** depend on repositories or **`EventBus`** directly, except indirectly through services.
 - **`AccountAccessService`** is reused anywhere an account id must be checked for **ADMIN / MANAGER / USER** (and to reject **BANKER** on staff account APIs).
-- **`DomainEventBusinessService`** is shared by **`EventService`**, **`AccountAuctionService`**, **`AuctionCloseService`**, and **`AuctionOfferService`** so event-driven business rules stay in one place.
+- **`EventSideEffectService`** is shared by **`EventService`**, **`AccountAuctionService`**, **`AuctionCloseService`**, and **`AuctionOfferService`** so event-driven business rules stay in one place.
 - **`AuctionLifecycleRepository`** is shared by list, browse, close, and offer flows so auction state and expiry stay consistent.
-- **`CrmIntegrationService`** is **not** constructed in **`createApp`**; it listens on the same **`EventBus`** instance after **`DomainEventBusinessService`** and HTTP paths have persisted work.
+- **`CrmSyncService`** is **not** constructed in **`createApp`**; it listens on the same **`EventBus`** instance after **`EventSideEffectService`** and HTTP paths have persisted work.
 
 ---
 
 ## Database design
+
+SQL was chosen for this project because the system is fundamentally built around structured, highly related data such as accounts, users, auctions, offers, and audit events. These entities have clear relationships and business rules that must be enforced consistently, and a relational database like PostgreSQL provides strong guarantees around data integrity, transactions, and consistency (ACID - means that every operation in the database must preserve all defined rules and constraints, ensuring the system always remains in a valid and reliable state before and after each transaction), which are critical in a financial context where incorrect or partial data is not acceptable.
+At the same time, SQL enables efficient querying across relationships, making it well-suited for features like dashboards, audit trails, and complex filtering (for example, retrieving all offers for an account or tracking historical events). This aligns naturally with the needs of this project, where both operational workflows and data analysis are important.
+The main tradeoff is reduced flexibility compared to NoSQL solutions: schema changes require planning and migrations, and scaling horizontally can be more complex. In addition, highly dynamic or unstructured data can be less convenient to model. However, in this case, the benefits of strong consistency, relational integrity, and reliable transactions clearly outweigh these limitations, making SQL the more appropriate choice for the system.
 
 PostgreSQL is the system of record. Prisma models express the domain:
 
@@ -123,7 +127,7 @@ PostgreSQL is the system of record. Prisma models express the domain:
 
 **Accounts and access**
 
-- **`Account`** — Customer-facing record: manager (`managerId`), contact fields (`costumerName`, `costumerEmail`, `costumerPhone`), `status` (`NEW` → `READY_FOR_AUCTION` → `AUCTION_OPEN` → `WON`), activity and CRM sync fields (`lastActivity`, `isHighActivity`, `syncStatus`, `failureReason`).
+- **`Account`** — Customer-facing record: manager (`managerId`), contact fields (`costumerName`, `costumerEmail`, `costumerPhone`), `status` (`NEW` → `READY_FOR_AUCTION` → `AUCTION_OPEN` → `WON`), activity and CRM sync fields (`lastActivity`, `isHighActivity`, `syncStatus` (`SYNCED` \| `FAILED`), `failureReason`).
 - **`AccountUser`** — Many-to-many **assignments** so a `USER` can collaborate on an account without being the manager.
 
 **Audit timeline**
@@ -137,6 +141,7 @@ PostgreSQL is the system of record. Prisma models express the domain:
 
 **Enums** (`UserRole`, `Specialisation`, `AccountStatus`, `SyncStatus`, `EventType`, `AuctionOpportunityStatus`) keep states explicit in the schema and in Prisma Client types.
 
+![My Image](./schemaERD.png)
 ---
 
 ## Role-based access control (RBAC)
@@ -145,7 +150,7 @@ PostgreSQL is the system of record. Prisma models express the domain:
 
 - **`ADMIN`** — Full staff visibility where middleware allows it; **resource checks** still apply on account-scoped routes (see below).
 - **`MANAGER`** — Owns accounts (`Account.managerId`); opens and closes auctions for those accounts.
-- **`USER`** — Access only to **assigned** accounts (`AccountUser`).
+- **`USER`** — Access only to **assigned** accounts (`AccountUser`), and can create document_uploaded and note_added events.
 - **`BANKER`** — Participates in auctions and offers; **must not** see account lists, account detail, or customer PII through staff APIs.
 
 **HTTP layer**
@@ -188,7 +193,7 @@ A **blind** auction here means bankers compete on **rate** and **timing** withou
 
 **Closing and outcomes**
 
-- Staff (**`MANAGER`** / **`ADMIN`**) close an auction via **`POST /auctions/:id/close`**, which records an **`AUCTION_CLOSED`** domain event, then runs **`DomainEventBusinessService.applyOnEventCreated`** in the same request (winner selection or finalize no-bid paths) before **`event.created`** is emitted for audit subscribers (**CRM** does not sync on **`AUCTION_CLOSED`**; winning path uses **`winning.offer.selected`**).
+- Staff (**`MANAGER`** / **`ADMIN`**) close an auction via **`POST /auctions/:id/close`**, which records an **`AUCTION_CLOSED`** domain event, then runs **`EventSideEffectService.applyOnEventCreated`** in the same request (winner selection or finalize no-bid paths) before **`ACCOUNT_EVENT_CREATED`** is emitted for audit subscribers (**CRM** does not sync on **`AUCTION_CLOSED`**; winning path uses **`winning.offer.selected`**).
 - **Winner selection**: among offers, lowest **`totalInterestRate`** wins; ties break on **earliest `createdAt`** (repository `orderBy`).
 - **No offers**: auction becomes **`EXPIRED`** (not **`CLOSED`** / no **`WON`** on the account). **With offers**: auction **`CLOSED`**, **`winningOfferId`** set, account **`WON`**.
 
@@ -202,18 +207,19 @@ Two related concepts coexist:
 
 1. **Persisted `Event` rows** — The audit **timeline** per account. Created through **`EventService`** (and other flows that write events). **`userId` on the row always comes from the authenticated user**, never from an untrusted body field.
 
-2. **In-process `EventBus`** — After the row is written and **synchronous** domain reactions complete, **`publishEventCreated`** emits **`event.created`** with a **`DomainEventCreatedPayload`** so subscribers can run **without** bloating the HTTP handler.
+2. **In-process `EventBus`** — After the row is written and **synchronous** domain reactions complete, **`publishAccountEventCreated`** emits topic **`ACCOUNT_EVENT_CREATED`** (value **`event.created`**) with an **`AccountEventCreatedPayload`** so subscribers can run **without** bloating the HTTP handler.
 
 **Order of operations (staff-created events via `POST /events`)**
 
 - Persist the `Event` row.
-- Run **`DomainEventBusinessService.applyOnEventCreated`** in **`EventService`** (same request): account readiness after **`DOCUMENT_UPLOADED`**, high-activity window, and any other rules tied to the new event type.
-- Emit **`event.created`** for **asynchronous** subscribers only (today: **CRM mock** for eligible types).
+- Run **`EventSideEffectService.applyOnEventCreated`** in **`EventService`** (same request): account readiness after **`DOCUMENT_UPLOADED`**, high-activity window, and any other rules tied to the new event type.
+- Emit **`ACCOUNT_EVENT_CREATED`** for **asynchronous** subscribers only (today: **CRM mock** for eligible types).
+- When **`DOCUMENT_UPLOADED`** moves an account from **`NEW` → `READY_FOR_AUCTION`**, **`EventSideEffectService`** also persists a **`STATUS_CHANGED`** `Event` row and emits another **`ACCOUNT_EVENT_CREATED`** (CRM may run twice in that request: upload, then status change). After an auction win, it similarly records **`STATUS_CHANGED`** for **`AUCTION_OPEN` → `WON`** before the winning-offer bus topic fires.
 
 **Listeners** (registered in **`registerEventBusListeners`** before the app accepts traffic):
 
-- **`event.created`** — **`CrmIntegrationService.handleAfterDomainEvent`** for **`DOCUMENT_UPLOADED`**, **`STATUS_CHANGED`**, and **`AUCTION_OPENED`** only (other types no-op). Failures set **`syncStatus`** / **`failureReason`** on the account.
-- **`winning.offer.selected`** — **`CrmIntegrationService.handleWinningOfferSelected`** after a winning offer is recorded.
+- **`ACCOUNT_EVENT_CREATED`** — **`CrmSyncService.handleAfterAccountEventCreated`** for **`DOCUMENT_UPLOADED`**, **`STATUS_CHANGED`**, and **`AUCTION_OPENED`** only (other types no-op). Failures set **`syncStatus`** / **`failureReason`** on the account.
+- **`winning.offer.selected`** — **`CrmSyncService.handleWinningOfferSelected`** after a winning offer is recorded.
 
 **Trade-off:** handlers run **after** the HTTP response path has committed the primary write; failures in subscribers are logged but do not roll back the `Event` row. See Assumptions and trade-offs.
 
@@ -223,10 +229,10 @@ Two related concepts coexist:
 
 **Layers**
 
-- **`CrmOutboundClient`** (`integration/crm-mock.ts`) — Small interface: **`push(accountId, ctx)`** returns a **`Promise`**. A real deployment would swap **`CrmMockOutbound`** for an HTTP client (Salesforce, HubSpot, internal CRM API) without changing **`CrmIntegrationService`**.
-- **`CrmMockOutbound`** — Async **`push`** (yields on **`Promise.resolve()`** then may throw). Failure probability comes from **`CRM_FAILURE_RATE`** (see **`backend/.env.example`**; default **0.35** when unset). **`CrmIntegrationService`** does not read that env var; only the mock does.
-- **`CrmIntegrationService`** — Application orchestration: filters domain events with **`TRIGGER_EVENTS`**, builds a **`ctx`** string for logs and error messages, calls **`crmClient.push`**, then **`AccountSyncRepository`** **`markSynced`** / **`markFailed`**. Shared **`syncAccount`** implements one try/catch path so success and failure handling are not duplicated.
-- **Event bus** — Listeners invoke **`CrmIntegrationService`** only; they never call **`CrmMockOutbound`** directly.
+- **`CrmApiClient`** (`integration/crm/mock-crm-api.client.ts`) — Small interface: **`push(accountId, ctx)`** returns a **`Promise`**. A real deployment would swap **`MockCrmApiClient`** for an HTTP client (Salesforce, HubSpot, internal CRM API) without changing **`CrmSyncService`**.
+- **`MockCrmApiClient`** — Async **`push`** (yields on **`Promise.resolve()`** then may throw). Failure probability comes from **`CRM_FAILURE_RATE`** (see **`backend/.env.example`**; default **0.35** when unset). **`CrmSyncService`** does not read that env var; only the mock does.
+- **`CrmSyncService`** — Application orchestration: filters domain events with **`TRIGGER_EVENTS`**, builds a **`ctx`** string for logs and error messages, calls **`crmClient.push`**, then **`AccountSyncRepository`** **`markSynced`** / **`markFailed`**. Shared **`syncAccount`** implements one try/catch path so success and failure handling are not duplicated.
+- **Event bus** — Listeners invoke **`CrmSyncService`** only; they never call **`MockCrmApiClient`** directly.
 
 **Flow (high level)**
 
@@ -238,8 +244,8 @@ flowchart LR
   end
   subgraph crm["CRM side effects"]
     L[Listener]
-    S[CrmIntegrationService]
-    C[CrmOutboundClient]
+    S[CrmSyncService]
+    C[CrmApiClient]
     R[AccountSyncRepository]
   end
   E --> EB
@@ -251,95 +257,43 @@ flowchart LR
 
 For **`winning.offer.selected`**, the same **`syncAccount`** path runs with **`ctx`** in the form **`winning_offer_selected:`** plus the winning offer id.
 
-**Architecture components**
+**Architecture and runtime flow (single diagram; copy this block only for draw.io Mermaid)**
 
 ```mermaid
-flowchart LR
-  subgraph API["Backend API Process"]
-    direction TB
+flowchart TD
+%% Architecture
+EventService --> EventRepo
+AccountAuctionService --> EventRepo
+AuctionOfferService --> EventRepo
+AuctionCloseService --> EventRepo
+EventRepo --> Postgres
 
-    subgraph Domain["Domain / Application Layer"]
-      EventSvc["EventService"]
-      AccountAuctionSvc["AccountAuctionService"]
-      AuctionOfferSvc["AuctionOfferService"]
-      AuctionCloseSvc["AuctionCloseService"]
-      DomainBusiness["DomainEventBusinessService"]
-    end
+EventService --> AccountEventCreated
+AccountAuctionService --> AccountEventCreated
+AuctionOfferService --> AccountEventCreated
+AuctionCloseService --> AccountEventCreated
 
-    subgraph Persistence["Persistence Layer"]
-      EventRepo["EventRepository / tx.event.create"]
-      DomainRepo["DomainEventBusinessRepository"]
-      AccountSyncRepo["AccountSyncRepository"]
-      DB[(PostgreSQL)]
-    end
+AccountEventCreated --> EventSideEffectService
+EventSideEffectService --> EventSideEffectRepo
+EventSideEffectRepo --> Postgres
 
-    subgraph Bus["In-process Event Bus"]
-      TopicCreated["event.created"]
-      TopicWinner["winning.offer.selected"]
-    end
+EventSideEffectService --> WinningOfferSelected
+WinningOfferSelected --> CrmSyncService
+AccountEventCreated --> CrmSyncService
 
-    subgraph Integration["Integration Layer"]
-      CrmIntegration["CrmIntegrationService"]
-      CrmMock["CrmMockOutbound (CrmOutboundClient)"]
-    end
-  end
+CrmSyncService --> MockCrmApiClient
+CrmSyncService --> AccountSyncRepository
+AccountSyncRepository --> Postgres
 
-  EventSvc --> EventRepo
-  AccountAuctionSvc --> EventRepo
-  AuctionOfferSvc --> EventRepo
-  AuctionCloseSvc --> EventRepo
-  EventRepo --> DB
-
-  EventSvc -->|publishEventCreated| TopicCreated
-  AccountAuctionSvc -->|publishEventCreated| TopicCreated
-  AuctionOfferSvc -->|publishEventCreated| TopicCreated
-  AuctionCloseSvc -->|publishEventCreated| TopicCreated
-
-  TopicCreated --> DomainBusiness
-  DomainBusiness --> DomainRepo
-  DomainRepo --> DB
-  DomainBusiness -->|emit winner| TopicWinner
-  DomainBusiness -->|create STATUS_CHANGED + publish| TopicCreated
-
-  TopicCreated -->|listener: domain-event-pipeline| CrmIntegration
-  TopicWinner -->|listener: crm-integration| CrmIntegration
-  CrmIntegration -->|push(accountId, ctx)| CrmMock
-  CrmIntegration -->|markSynced / markFailed| AccountSyncRepo
-  AccountSyncRepo --> DB
-```
-
-**Event sequence (runtime flow)**
-
-```mermaid
-sequenceDiagram
-  participant S as Business Service
-  participant R as Repository
-  participant DB as PostgreSQL
-  participant B as EventBus
-  participant D as DomainEventBusinessService
-  participant L as CRM Listeners
-  participant C as CrmIntegrationService
-  participant M as CrmMockOutbound
-  participant SR as AccountSyncRepository
-
-  S->>R: Persist domain event row
-  R->>DB: INSERT Event(...)
-  S->>D: applyOnEventCreated(payload)
-  D->>DB: Domain side effects
-  alt Auction winner selected
-    D->>B: emit("winning.offer.selected")
-  end
-  S->>B: emit("event.created")
-  B->>L: Dispatch subscribed handlers
-  L->>C: handleAfterDomainEvent / handleWinningOfferSelected
-  C->>M: push(accountId, ctx)
-  alt CRM success
-    C->>SR: markSynced(accountId)
-    SR->>DB: UPDATE account syncStatus=SYNCED
-  else CRM failure
-    C->>SR: markFailed(accountId, reason)
-    SR->>DB: UPDATE account syncStatus=FAILED, failureReason
-  end
+%% Runtime sequence
+StepPersist[Persist event row] --> StepPublish[Publish event created]
+StepPublish --> StepDomain[Run domain business rules]
+StepDomain --> StepWinner[Optional emit winning offer selected]
+StepPublish --> StepCrm[CRM integration handler runs]
+StepWinner --> StepCrm
+StepCrm --> StepPush[Call CRM mock client]
+StepPush --> StepSynced[Mark account synced]
+StepPush --> StepFailed[Mark failed and save failure reason]
 ```
 
 ---
@@ -501,8 +455,8 @@ The backend ships a **Vitest** suite (`cd backend && npm run test`). Tests are *
 - **RBAC and data scope** — Wrong role or wrong account access is a security and compliance defect. Tests assert bankers cannot use staff account APIs, users and managers only see in-scope accounts, and event APIs reject disallowed roles.
 - **Banker data minimization** — Offer responses must not leak `accountId` or customer identifiers to the banker client; a mapper test locks that contract.
 - **Auction rules** — Submitting offers on non-open or expired auctions must fail with stable error codes; this protects integrity and matches UI expectations.
-- **Domain reactions on events** — `DOCUMENT_UPLOADED` transitions **`NEW` → `READY_FOR_AUCTION`**, high-activity counts use a 24-hour window, and winner selection uses lowest rate then earliest offer; these are central business rules.
-- **Event-driven CRM** — **`CrmIntegrationService`** is tested with an injected **`{ push }`** stub (no real mock module); assertions cover success sync, failure persistence, unrelated event types, and the winning-offer path.
+- **Domain reactions on events** — `DOCUMENT_UPLOADED` transitions **`NEW` → `READY_FOR_AUCTION`** (and may emit **`STATUS_CHANGED`**), high-activity counts use a 24-hour window, winner selection uses lowest rate then earliest offer, and the win path can emit **`STATUS_CHANGED`** plus **`winning.offer.selected`**; these are central business rules.
+- **Event-driven CRM** — **`CrmSyncService`** is tested with an injected **`{ push }`** stub (no real mock module); assertions cover success sync, failure persistence, unrelated event types, and the winning-offer path.
 
 Together, the suite favors **short, readable tests** on **high-risk paths** rather than blanket coverage of every controller line.
 
@@ -512,4 +466,4 @@ Together, the suite favors **short, readable tests** on **high-risk paths** rath
 
 Secrets and deployment-specific values live in **`.env`** files, not in git. Copy **`backend/.env.example`** and **`frontend/.env.example`** and adjust for your machine or deployment.
 
-Backend-only: **`CRM_FAILURE_RATE`** (0–1) tunes how often **`CrmMockOutbound.push`** throws in development; omit to use the default **0.35**.
+Backend-only: **`CRM_FAILURE_RATE`** (0–1) tunes how often **`MockCrmApiClient.push`** throws in development; omit to use the default **0.35**.

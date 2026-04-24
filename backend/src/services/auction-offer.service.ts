@@ -1,6 +1,6 @@
 import { AuctionOpportunityStatus, Prisma } from "@prisma/client";
 import type { EventBus } from "../event-bus/event-bus.js";
-import { publishEventCreated, toDomainEventCreatedPayload } from "../event-bus/publish-domain-event.js";
+import { publishAccountEventCreated, toAccountEventCreatedPayload } from "../event-bus/publish-account-event.js";
 import { HttpError } from "../utils/http-error.js";
 import { emailLocalPart } from "../utils/email-display.js";
 import { parseBody } from "../validation/parse-body.js";
@@ -10,7 +10,7 @@ import { mapBankerSubmitOfferResponse, type BankerSubmitOfferResponse } from "..
 import { AuctionLifecycleRepository } from "../repositories/auction-lifecycle.repository.js";
 import { AuctionOfferRepository } from "../repositories/auction-offer.repository.js";
 import type { BankOfferApiRow } from "../types/bank-offer-api.js";
-import type { DomainEventBusinessService } from "./domain-event-business.service.js";
+import type { EventSideEffectService } from "./event-side-effect.service.js";
 import type { AuthUser } from "../types/auth-user.js";
 import { effectiveAuctionOpportunityStatus } from "../utils/auction-opportunity-status.js";
 
@@ -26,7 +26,7 @@ export class AuctionOfferService {
     private readonly repo: AuctionOfferRepository,
     private readonly lifecycleRepo: AuctionLifecycleRepository,
     private readonly bus: EventBus,
-    private readonly domainEventBusiness: DomainEventBusinessService
+    private readonly eventSideEffects: EventSideEffectService
   ) {}
 
   async listOffers(
@@ -161,8 +161,8 @@ export class AuctionOfferService {
         totalInterestRate,
       });
 
-      await this.domainEventBusiness.applyOnEventCreated(toDomainEventCreatedPayload(eventRow));
-      publishEventCreated(this.bus, eventRow);
+      await this.eventSideEffects.applyOnEventCreated(toAccountEventCreatedPayload(eventRow));
+      publishAccountEventCreated(this.bus, eventRow);
 
       return mapBankerSubmitOfferResponse({
         offer: {

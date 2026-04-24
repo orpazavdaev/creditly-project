@@ -1,12 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import type { AuctionOpportunity, BankOffer } from "@prisma/client";
-import { DomainEventBusinessService } from "../src/services/domain-event-business.service.js";
-import type { DomainEventBusinessRepository } from "../src/repositories/domain-event-business.repository.js";
+import { EventSideEffectService } from "../src/services/event-side-effect.service.js";
+import type { EventSideEffectRepository } from "../src/repositories/event-side-effect.repository.js";
 import { WINNING_OFFER_SELECTED_TOPIC } from "../src/event-bus/crm-integration-events.js";
-import type { DomainEventCreatedPayload } from "../src/event-bus/domain-events.js";
+import type { AccountEventCreatedPayload } from "../src/event-bus/account-events.js";
 import type { EventBus } from "../src/event-bus/event-bus.js";
 
-function baseRepo(): Record<keyof DomainEventBusinessRepository, ReturnType<typeof vi.fn>> {
+function baseRepo(): Record<keyof EventSideEffectRepository, ReturnType<typeof vi.fn>> {
   return {
     updateAccountDocumentState: vi.fn().mockResolvedValue(true),
     createStatusChangedEvent: vi.fn().mockImplementation(async (data) => ({
@@ -29,7 +29,7 @@ function baseRepo(): Record<keyof DomainEventBusinessRepository, ReturnType<type
   };
 }
 
-describe("DomainEventBusinessService auction close", () => {
+describe("EventSideEffectService auction close", () => {
   it("selects best offer as lowest totalInterestRate (first in sorted list)", async () => {
     const best: BankOffer = {
       id: "offer-best",
@@ -64,9 +64,9 @@ describe("DomainEventBusinessService auction close", () => {
     repoFns.findAuctionWithOffersByAccountId.mockResolvedValue(auction);
     const emit = vi.fn();
     const bus = { emit } as unknown as EventBus;
-    const svc = new DomainEventBusinessService(repoFns as unknown as DomainEventBusinessRepository, bus);
+    const svc = new EventSideEffectService(repoFns as unknown as EventSideEffectRepository, bus);
 
-    const payload: DomainEventCreatedPayload = {
+    const payload: AccountEventCreatedPayload = {
       id: "ev1",
       accountId: "acc1",
       userId: "m1",
@@ -112,9 +112,9 @@ describe("DomainEventBusinessService auction close", () => {
     repoFns.findAuctionWithOffersByAccountId.mockResolvedValue(auction);
     const emit = vi.fn();
     const bus = { emit } as unknown as EventBus;
-    const svc = new DomainEventBusinessService(repoFns as unknown as DomainEventBusinessRepository, bus);
+    const svc = new EventSideEffectService(repoFns as unknown as EventSideEffectRepository, bus);
 
-    const payload: DomainEventCreatedPayload = {
+    const payload: AccountEventCreatedPayload = {
       id: "ev2",
       accountId: "acc2",
       userId: "m1",
@@ -164,7 +164,7 @@ describe("DomainEventBusinessService auction close", () => {
     repoFns.findAuctionWithOffersByAccountId.mockResolvedValue(auction);
     const emit = vi.fn();
     const bus = { emit } as unknown as EventBus;
-    const svc = new DomainEventBusinessService(repoFns as unknown as DomainEventBusinessRepository, bus);
+    const svc = new EventSideEffectService(repoFns as unknown as EventSideEffectRepository, bus);
 
     await svc.applyOnEventCreated({
       id: "ev3",
@@ -188,7 +188,7 @@ describe("DomainEventBusinessService auction close", () => {
     const repoFns = baseRepo();
     repoFns.countEventsSince.mockResolvedValue(4);
     const bus = { emit: vi.fn() } as unknown as EventBus;
-    const svc = new DomainEventBusinessService(repoFns as unknown as DomainEventBusinessRepository, bus);
+    const svc = new EventSideEffectService(repoFns as unknown as EventSideEffectRepository, bus);
 
     await svc.applyOnEventCreated({
       id: "ev4",
@@ -206,7 +206,7 @@ describe("DomainEventBusinessService auction close", () => {
   it("runs document workflow on DOCUMENT_UPLOADED", async () => {
     const repoFns = baseRepo();
     const bus = { emit: vi.fn() } as unknown as EventBus;
-    const svc = new DomainEventBusinessService(repoFns as unknown as DomainEventBusinessRepository, bus);
+    const svc = new EventSideEffectService(repoFns as unknown as EventSideEffectRepository, bus);
 
     await svc.applyOnEventCreated({
       id: "ev5",

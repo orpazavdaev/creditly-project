@@ -1,8 +1,8 @@
 import { EventType } from "@prisma/client";
-import type { DomainEventCreatedPayload } from "../event-bus/domain-events.js";
-import type { WinningOfferSelectedPayload } from "../event-bus/crm-integration-events.js";
-import type { AccountSyncRepository } from "../repositories/account-sync.repository.js";
-import type { CrmOutboundClient } from "./crm-mock.js";
+import type { AccountEventCreatedPayload } from "../../event-bus/account-events.js";
+import type { WinningOfferSelectedPayload } from "../../event-bus/crm-integration-events.js";
+import type { AccountSyncRepository } from "../../repositories/account-sync.repository.js";
+import type { CrmApiClient } from "./mock-crm-api.client.js";
 
 const TRIGGER_EVENTS = new Set<EventType>([
   EventType.DOCUMENT_UPLOADED,
@@ -10,13 +10,13 @@ const TRIGGER_EVENTS = new Set<EventType>([
   EventType.AUCTION_OPENED,
 ]);
 
-export class CrmIntegrationService {
+export class CrmSyncService {
   constructor(
     private readonly sync: AccountSyncRepository,
-    private readonly crmClient: CrmOutboundClient
+    private readonly crmClient: CrmApiClient
   ) {}
 
-  async handleAfterDomainEvent(payload: DomainEventCreatedPayload): Promise<void> {
+  async handleAfterAccountEventCreated(payload: AccountEventCreatedPayload): Promise<void> {
     const { type, accountId } = payload;
     if (!TRIGGER_EVENTS.has(type)) {
       return;

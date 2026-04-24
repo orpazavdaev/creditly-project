@@ -1,8 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { CrmIntegrationService } from "../src/integration/crm-integration.service.js";
+import { CrmSyncService } from "../src/integration/crm/crm-sync.service.js";
 import type { AccountSyncRepository } from "../src/repositories/account-sync.repository.js";
+import { EventBus } from "../src/event-bus/event-bus.js";
+import { registerCrmOnAccountEventCreated } from "../src/event-bus/listeners/crm-on-account-event-created.listener.js";
+import { registerCrmWinningOfferListener } from "../src/event-bus/listeners/crm-integration.listener.js";
+import { ACCOUNT_EVENT_CREATED } from "../src/event-bus/account-events.js";
+import { WINNING_OFFER_SELECTED_TOPIC } from "../src/event-bus/crm-integration-events.js";
 
-describe("CrmIntegrationService", () => {
+describe("CrmSyncService", () => {
   let push: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -14,9 +19,9 @@ describe("CrmIntegrationService", () => {
       markSynced: vi.fn().mockResolvedValue(undefined),
       markFailed: vi.fn().mockResolvedValue(undefined),
     } as unknown as AccountSyncRepository;
-    const svc = new CrmIntegrationService(sync, { push });
+    const svc = new CrmSyncService(sync, { push });
 
-    await svc.handleAfterDomainEvent({
+    await svc.handleAfterAccountEventCreated({
       id: "e1",
       accountId: "acc1",
       userId: "u1",
@@ -36,9 +41,9 @@ describe("CrmIntegrationService", () => {
       markSynced: vi.fn().mockResolvedValue(undefined),
       markFailed: vi.fn().mockResolvedValue(undefined),
     } as unknown as AccountSyncRepository;
-    const svc = new CrmIntegrationService(sync, { push });
+    const svc = new CrmSyncService(sync, { push });
 
-    await svc.handleAfterDomainEvent({
+    await svc.handleAfterAccountEventCreated({
       id: "e2",
       accountId: "acc1",
       userId: "m1",
@@ -58,9 +63,9 @@ describe("CrmIntegrationService", () => {
       markSynced: vi.fn().mockResolvedValue(undefined),
       markFailed: vi.fn().mockResolvedValue(undefined),
     } as unknown as AccountSyncRepository;
-    const svc = new CrmIntegrationService(sync, { push });
+    const svc = new CrmSyncService(sync, { push });
 
-    await svc.handleAfterDomainEvent({
+    await svc.handleAfterAccountEventCreated({
       id: "e3",
       accountId: "acc2",
       userId: "u1",
@@ -78,7 +83,7 @@ describe("CrmIntegrationService", () => {
       markSynced: vi.fn().mockResolvedValue(undefined),
       markFailed: vi.fn().mockResolvedValue(undefined),
     } as unknown as AccountSyncRepository;
-    const svc = new CrmIntegrationService(sync, { push });
+    const svc = new CrmSyncService(sync, { push });
 
     await svc.handleWinningOfferSelected({
       accountId: "acc9",
@@ -88,5 +93,55 @@ describe("CrmIntegrationService", () => {
 
     expect(push).toHaveBeenCalledWith("acc9", "winning_offer_selected:offer1");
     expect(sync.markSynced).toHaveBeenCalledWith("acc9");
+  });
+});
+
+describe("EventBus CRM listener wiring", () => {
+  it("registerCrmOnAccountEventCreated forwards ACCOUNT_EVENT_CREATED to CrmSyncService", async () => {
+    let complete!: () => void;
+    const done = new Promise<void>((r) => {
+      complete = r;
+    });
+    const handleAfterAccountEventCreated = vi.fn().mockImplementation(async () => {
+      complete();
+    });
+    const crm = { handleAfterAccountEventCreated } as unknown as CrmSyncService;
+    const bus = new EventBus();
+    registerCrmOnAccountEventCreated(bus, crm);
+    bus.emit(ACCOUNT_EVENT_CREATED, {
+      id: "e1",
+      accountId: "a1",
+      userId: "u1",
+      type: "DOCUMENT_UPLOADED",
+      typeApi: "document_uploaded",
+      createdAt: new Date(),
+      metadata: {},
+    });
+    await done;
+    expect(handleAfterAccountEventCreated).toHaveBeenCalledWith(
+      expect.objectContaining({ accountId: "a1", type: "DOCUMENT_UPLOADED" })
+    );
+  });
+
+  it("registerCrmWinningOfferListener forwards topic to handleWinningOfferSelected", async () => {
+    let complete!: () => void;
+    const done = new Promise<void>((r) => {
+      complete = r;
+    });
+    const handleWinningOfferSelected = vi.fn().mockImplementation(async () => {
+      complete();
+    });
+    const crm = { handleWinningOfferSelected } as unknown as CrmSyncService;
+    const bus = new EventBus();
+    registerCrmWinningOfferListener(bus, WINNING_OFFER_SELECTED_TOPIC, crm);
+    bus.emit(WINNING_OFFER_SELECTED_TOPIC, {
+      accountId: "a1",
+      offerId: "o1",
+      auctionId: "auc1",
+    });
+    await done;
+    expect(handleWinningOfferSelected).toHaveBeenCalledWith(
+      expect.objectContaining({ accountId: "a1", offerId: "o1" })
+    );
   });
 });

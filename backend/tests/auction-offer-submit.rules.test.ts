@@ -3,7 +3,7 @@ import { AuctionOfferService } from "../src/services/auction-offer.service.js";
 import type { AuctionOfferRepository } from "../src/repositories/auction-offer.repository.js";
 import type { AuctionLifecycleRepository } from "../src/repositories/auction-lifecycle.repository.js";
 import type { EventBus } from "../src/event-bus/event-bus.js";
-import type { DomainEventBusinessService } from "../src/services/domain-event-business.service.js";
+import type { EventSideEffectService } from "../src/services/event-side-effect.service.js";
 
 describe("AuctionOfferService submitOffer", () => {
   it("rejects when auction is not OPEN", async () => {
@@ -23,7 +23,7 @@ describe("AuctionOfferService submitOffer", () => {
     } as unknown as AuctionOfferRepository;
     const lifecycle = { expireOpenIfPastDue: vi.fn().mockResolvedValue(undefined) } as unknown as AuctionLifecycleRepository;
     const bus = { emit: vi.fn() } as unknown as EventBus;
-    const domain = { applyOnEventCreated: vi.fn() } as unknown as DomainEventBusinessService;
+    const domain = { applyOnEventCreated: vi.fn() } as unknown as EventSideEffectService;
     const svc = new AuctionOfferService(repo, lifecycle, bus, domain);
 
     await expect(svc.submitOffer("bk1", "auc1", { totalInterestRate: 3.5 })).rejects.toMatchObject({
@@ -49,7 +49,7 @@ describe("AuctionOfferService submitOffer", () => {
     } as unknown as AuctionOfferRepository;
     const lifecycle = { expireOpenIfPastDue: vi.fn().mockResolvedValue(undefined) } as unknown as AuctionLifecycleRepository;
     const bus = { emit: vi.fn() } as unknown as EventBus;
-    const domain = { applyOnEventCreated: vi.fn() } as unknown as DomainEventBusinessService;
+    const domain = { applyOnEventCreated: vi.fn() } as unknown as EventSideEffectService;
     const svc = new AuctionOfferService(repo, lifecycle, bus, domain);
 
     await expect(svc.submitOffer("bk1", "auc1", { totalInterestRate: 3.5 })).rejects.toMatchObject({

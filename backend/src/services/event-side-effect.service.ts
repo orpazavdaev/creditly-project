@@ -1,22 +1,22 @@
 import { AccountStatus, AuctionOpportunityStatus, EventType } from "@prisma/client";
-import type { DomainEventCreatedPayload } from "../event-bus/domain-events.js";
+import type { AccountEventCreatedPayload } from "../event-bus/account-events.js";
 import type { EventBus } from "../event-bus/event-bus.js";
-import { publishEventCreated } from "../event-bus/publish-domain-event.js";
+import { publishAccountEventCreated } from "../event-bus/publish-account-event.js";
 import {
   WINNING_OFFER_SELECTED_TOPIC,
   type WinningOfferSelectedPayload,
 } from "../event-bus/crm-integration-events.js";
-import { DomainEventBusinessRepository } from "../repositories/domain-event-business.repository.js";
+import { EventSideEffectRepository } from "../repositories/event-side-effect.repository.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export class DomainEventBusinessService {
+export class EventSideEffectService {
   constructor(
-    private readonly repo: DomainEventBusinessRepository,
+    private readonly repo: EventSideEffectRepository,
     private readonly bus: EventBus
   ) {}
 
-  async applyOnEventCreated(payload: DomainEventCreatedPayload): Promise<void> {
+  async applyOnEventCreated(payload: AccountEventCreatedPayload): Promise<void> {
     const { type, accountId, userId } = payload;
 
     if (type === EventType.DOCUMENT_UPLOADED) {
@@ -28,7 +28,7 @@ export class DomainEventBusinessService {
           fromStatus: AccountStatus.NEW,
           toStatus: AccountStatus.READY_FOR_AUCTION,
         });
-        publishEventCreated(this.bus, statusChanged);
+        publishAccountEventCreated(this.bus, statusChanged);
       }
     }
 
@@ -62,7 +62,7 @@ export class DomainEventBusinessService {
         toStatus: AccountStatus.WON,
         metadata: { auctionId: auction.id, winningOfferId: best.id },
       });
-      publishEventCreated(this.bus, statusChanged);
+      publishAccountEventCreated(this.bus, statusChanged);
       const winningPayload: WinningOfferSelectedPayload = {
         accountId,
         auctionId: auction.id,

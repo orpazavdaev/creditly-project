@@ -8,7 +8,7 @@ import {
 } from "@prisma/client";
 import { prisma } from "./prisma.js";
 
-export class DomainEventBusinessRepository {
+export class EventSideEffectRepository {
   updateAccountDocumentState(accountId: string, lastActivity: Date): Promise<boolean> {
     return prisma.account
       .updateMany({

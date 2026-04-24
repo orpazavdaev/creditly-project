@@ -1,18 +1,18 @@
 import { AuctionOpportunityStatus } from "@prisma/client";
 import type { EventBus } from "../event-bus/event-bus.js";
-import { publishEventCreated, toDomainEventCreatedPayload } from "../event-bus/publish-domain-event.js";
+import { publishAccountEventCreated, toAccountEventCreatedPayload } from "../event-bus/publish-account-event.js";
 import { HttpError } from "../utils/http-error.js";
 import { AuctionLifecycleRepository } from "../repositories/auction-lifecycle.repository.js";
 import type { AuthUser } from "../types/auth-user.js";
 import { AccountAccessService } from "./account-access.service.js";
-import { DomainEventBusinessService } from "./domain-event-business.service.js";
+import { EventSideEffectService } from "./event-side-effect.service.js";
 
 export class AuctionCloseService {
   constructor(
     private readonly lifecycleRepo: AuctionLifecycleRepository,
     private readonly bus: EventBus,
     private readonly accountAccess: AccountAccessService,
-    private readonly domainEventBusiness: DomainEventBusinessService
+    private readonly eventSideEffects: EventSideEffectService
   ) {}
 
   async closeByManager(user: AuthUser, auctionId: string): Promise<{ closed: true }> {
@@ -40,8 +40,8 @@ export class AuctionCloseService {
       userId: user.id,
       auctionId: row.id,
     });
-    await this.domainEventBusiness.applyOnEventCreated(toDomainEventCreatedPayload(eventRow));
-    publishEventCreated(this.bus, eventRow);
+    await this.eventSideEffects.applyOnEventCreated(toAccountEventCreatedPayload(eventRow));
+    publishAccountEventCreated(this.bus, eventRow);
     return { closed: true };
   }
 }

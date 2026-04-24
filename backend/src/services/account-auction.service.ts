@@ -1,6 +1,6 @@
 import { AccountStatus, Prisma, type Specialisation } from "@prisma/client";
 import type { EventBus } from "../event-bus/event-bus.js";
-import { publishEventCreated, toDomainEventCreatedPayload } from "../event-bus/publish-domain-event.js";
+import { publishAccountEventCreated, toAccountEventCreatedPayload } from "../event-bus/publish-account-event.js";
 import { HttpError } from "../utils/http-error.js";
 import { eventTypeToApi } from "../utils/event-type-api.js";
 import { AccountAuctionRepository } from "../repositories/account-auction.repository.js";
@@ -9,7 +9,7 @@ import { emailLocalPart } from "../utils/email-display.js";
 import { parseBody } from "../validation/parse-body.js";
 import { OpenAuctionBodySchema } from "../validation/schemas.js";
 import { AccountAccessService } from "./account-access.service.js";
-import type { DomainEventBusinessService } from "./domain-event-business.service.js";
+import type { EventSideEffectService } from "./event-side-effect.service.js";
 import type { EventApiRow } from "./event.service.js";
 
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
@@ -29,7 +29,7 @@ export class AccountAuctionService {
     private readonly repo: AccountAuctionRepository,
     private readonly bus: EventBus,
     private readonly accountAccess: AccountAccessService,
-    private readonly domainEventBusiness: DomainEventBusinessService
+    private readonly eventSideEffects: EventSideEffectService
   ) {}
 
   async createForAccount(
@@ -65,8 +65,8 @@ export class AccountAuctionService {
         expiresAt,
       });
 
-      await this.domainEventBusiness.applyOnEventCreated(toDomainEventCreatedPayload(eventRow));
-      publishEventCreated(this.bus, eventRow);
+      await this.eventSideEffects.applyOnEventCreated(toAccountEventCreatedPayload(eventRow));
+      publishAccountEventCreated(this.bus, eventRow);
 
       return {
         auction: {

@@ -1,8 +1,8 @@
 import type { EventType } from "@prisma/client";
 
-export const DOMAIN_EVENT_CREATED = "event.created";
+export const ACCOUNT_EVENT_CREATED = "event.created";
 
-export type DomainEventCreatedPayload = {
+export type AccountEventCreatedPayload = {
   id: string;
   accountId: string;
   userId: string;
