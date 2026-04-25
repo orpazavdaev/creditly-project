@@ -99,7 +99,18 @@ Using the Repository pattern is important because it creates a clear separation 
 - **`integration/crm/`** — **`CrmApiClient`** type and **`MockCrmApiClient`** (`mock-crm-api.client.ts`); **`CrmSyncService`** (`crm-sync.service.ts`) orchestrates pushes and account sync state. **`registerEventBusListeners`** wires **`MockCrmApiClient`**, **`CrmSyncService`**, **`registerCrmOnAccountEventCreated`**, and the winning-offer listener; controllers do not import this layer directly.
 - **`jobs/`** — Scheduled in-process tasks.
 
+![My Image](./assets/layered-structure.png)
+
 The frontend uses the **App Router**, **React Query** for server state, a shared **`apiFetch`** helper, and **`AuthProvider`** for access tokens plus refresh via cookies.
+
+---
+
+
+## Assumptions
+- **Document upload / notes** — Document and note events are modeled conceptually without a dedicated storage layer or blob system. This simplifies the architecture and keeps the scope focused.
+- **Account eligibility logic** — An account becomes eligible for auctions only after document upload and reaching the READY_FOR_AUCTION state. This enforces a clear business rule that ensures only verified accounts enter financial workflows, improving data integrity and process correctness.
+- **Admin restriction on bank offers** — Despite full RBAC permissions, admins are not allowed to create bank offers because they are not associated with a specific financial institution context. This enforces domain correctness over pure permission flexibility, preventing logically invalid system states.
+- **User-account relationship model** — Users are allowed to be linked to accounts and perform actions directly on them without additional approval layers.
 
 ---
 
@@ -138,7 +149,7 @@ The frontend uses the **App Router**, **React Query** for server state, a shared
 
 
 ---
-### Backend class reference, roles, and relationships
+### Backend classes
 
 Classes are used for **constructor injection**: each type holds its collaborators as **`private readonly`** fields. There is **no shared base class** for controllers, services, or repositories.
 
@@ -198,7 +209,7 @@ Classes are used for **constructor injection**: each type holds its collaborator
 | **`MockCrmApiClient`** | Implements **`CrmApiClient`**: simulated async CRM push with configurable failure rate. |
 | **`HttpError`** | **`extends Error`**: typed **`status`** and **`code`** for the global error middleware. |
 
-**Relationship sketch (composition, not inheritance)**
+**Relationship sketch**
 
 - **Controllers** depend only on **services** (and sometimes env for routers). They do **not** depend on repositories or **`EventBus`** directly, except indirectly through services.
 - **`AccountAccessService`** is reused anywhere an account id must be checked for **ADMIN / MANAGER / USER** (and to reject **BANKER** on staff account APIs).
@@ -313,6 +324,8 @@ Failures in these flows update syncStatus and failureReason on the account.
 
 Event handlers run asynchronously after the main HTTP flow completes and the primary data is already persisted. This improves performance and keeps request handling fast, but introduces eventual consistency: if a subscriber fails (e.g. CRM sync), the main operation is not rolled back. Instead, failures are logged and tracked for later handling.
 
+![My Image](./assets/event-driven-flow.png)
+
 ---
 
 ## CRM outbound integration (mock)
@@ -344,9 +357,6 @@ For events like `winning.offer.selected`, the same `syncAccount` flow is reused 
 ---
 ## Token strategy
 
-להשלים תרשים ולהסביר את הflow
-
-להסביר על הcleanjob
 
 | Artifact | Transport | Lifetime | Storage server-side |
 | -------- | ----------- | -------- | -------------------- |
@@ -355,9 +365,16 @@ For events like `winning.offer.selected`, the same `syncAccount` flow is reused 
 
 **Login** returns `{ accessToken, expiresIn }` and sets the refresh cookie. **Refresh** (`AuthService.refresh`) reads the cookie, resolves the matching **`RefreshToken`** row, **rotates** the refresh material, and returns a new access token. **Register** does not start a session (no tokens), so “identity exists” and “session started” stay distinct.
 
+![My Image](./assets/auth-1.png)
+
+![My Image](./assets/auth-2.png)
+
+![My Image](./assets/auth-3.png)
+
+![My Image](./assets/auth-4.png)
 
 
-### Refresh token rotation (what it means here)
+### Refresh token rotation 
 
 **Rotation** means the refresh token presented by the client is **consumed**: it must not work again, and the server issues **new** refresh material (new random value, new hash stored, new cookie). That supports **one-time use** of each refresh token and limits replay if a token is stolen after rotation.
 
@@ -377,43 +394,13 @@ Users stop being able to refresh when **no successful refresh** occurs for longe
 
 The periodic **`startRefreshTokenCleanupJob`** deletes rows whose **`expiresAt` is already in the past**. That job is **housekeeping** (limit table growth from abandoned sessions, multiple logins, and similar), **not** the mechanism that enforces expiry at request time.
 
-### Tradeoffs and how this fits common practice
+![My Image](./assets/clean-refresh-job.png)
 
-**Aligned with widely used patterns**
+The authentication system implemented here is based on a combination of widely adopted industry practices, balanced with practical product needs, focusing on security, performance, and user experience.
 
-- **Short-lived access tokens** plus a **separate refresh path** limits damage if an access token leaks (small exposure window).
-- **Refresh token rotation** (invalidate old, issue new) is a common recommendation and a good base for stricter policies later (for example **reuse detection** and revoking a **family** of tokens if an old refresh is presented again).
+The architecture uses short-lived access tokens alongside a separate refresh token mechanism, which reduces the impact of a potential token leak by limiting the exposure window. In addition, refresh token rotation is implemented, where each refresh invalidates the previous token and issues a new one. This approach reduces the risk of token reuse.
 
-**Sliding refresh expiry**
-
-- **Pros:** straightforward “stay signed in while you use the app” behavior; fewer surprise logouts during active use.
-- **Cons:** an **active** session can continue **indefinitely** from the refresh mechanism alone; risk is bounded by how long a **stolen refresh cookie** remains usable if the attacker refreshes before the victim notices.
-
-**Stronger or more regulated systems often add** (not implemented here unless you extend the code)
-
-- **Absolute maximum session lifetime** (force sign-in again after N days from login even if refresh keeps succeeding).
-- **Idle timeout** (require re-auth after no API activity for M minutes or hours), which is **orthogonal** to refresh TTL.
-- **Refresh reuse / theft handling** (detect presentation of an already-rotated refresh token and revoke related sessions).
-- **Binding** (cryptographically tie refresh usage to a client or device) when the threat model warrants the complexity.
-
-There is no single universal “best practice”; the right balance depends on **risk**, **compliance**, and **UX**. This prototype leans toward **convenience** and **standard JWT + HttpOnly refresh** mechanics; tighten the model when the product requires stricter session bounds.
-
----
-
-## Prisma and schema evolution (no committed migrations)
-
-This repository ships **`prisma/schema.prisma`** and uses **`prisma db push`** (`npm run db:push`) to align a **development** database with the schema **without** generating SQL migration history.
-
-**Why no `prisma/migrations` folder**
-
-- Early-stage and demo-friendly: schema changes apply quickly, with less merge friction on migration files.
-- Disposable local databases match the model in seconds.
-
-**What I would do for production**
-
-- Introduce **versioned migrations** (`prisma migrate dev` in development, **`prisma migrate deploy`** in CI/CD) once the schema stabilizes. Migrations give repeatable, reviewable DDL, auditable rollouts, and safe evolution on shared databases.
-
-
+This design reflects a deliberate trade-off: it prioritizes a smooth user experience and simple authentication flow while still maintaining a standard and secure JWT-based model with HttpOnly cookies. There is no single universally “best” authentication strategy; the right balance depends on risk level, compliance requirements, and UX constraints. 
 
 ---
 
@@ -432,25 +419,38 @@ This repository ships **`prisma/schema.prisma`** and uses **`prisma db push`** (
 | `POST /auctions/:id/offers` | `SubmitOfferBodySchema` (`totalInterestRate` coerced number, finite, positive) | `AuctionOfferService.submitOffer` |
 
 ---
+## Reporting Aggregations and Scalability Considerations
 
-## Assumptions and trade-offs
+
+At the moment, the main aggregations in this project are concentrated in AnalyticsRepository (status-based counts plus offer aggregations such as average/min interest), with a few targeted counts used for business rules (for example, countEventsSince for high-activity detection and _count checks for auction-offer decisions). I chose live aggregation (compute at request time) because it is simple, keeps the architecture lean, and always returns the most current data without adding extra pipelines. The trade-off is that as data volume grows, these queries become more expensive (higher I/O/CPU and latency). At larger scale, moving to pre-aggregation (persisted summary tables/metrics updated on a schedule or via events) or materialized views (database-stored results of aggregation queries refreshed periodically/on demand) would likely be more efficient for read-heavy analytics. The trade-off there is added operational complexity and possible data staleness between refresh cycles.
+
+---
+
+## Transaction Strategy and Consistency Trade-Offs
+
+Database transactions are used in the project for multi-step writes that must stay atomic, mainly around account and auction lifecycle flows (for example: creating an account plus optional AccountUser link, creating an auction plus status/event updates, creating an offer plus OFFER_SUBMITTED event, and closing auction + marking account WON). This ensures consistency and prevents partial state when one step fails. The benefit is strong integrity on critical business workflows with relatively simple repository-level orchestration. The trade-off is longer lock windows and lower throughput under heavy concurrency if transactions become large or long-running. At larger scale, a common evolution is to keep transactions short and move cross-boundary side effects to using patterns such as outbox or event-driven flows. similarly, for high-write contention, optimistic concurrency and narrower update scopes can reduce lock pressure. In this codebase, this separation is already partially applied, as CRM synchronization is handled asynchronously after the transaction completes rather than within it.
+
+---
+## Trade-offs
 
 - **Auth sessions** — Refresh tokens use rotation with a sliding expiration model, meaning each refresh extends the session lifetime. This improves user experience by keeping active users logged in without interruption. The tradeoff is that there is no absolute session limit, so a long-lived active session can theoretically persist indefinitely until revoked manually or invalidated, which slightly increases long-term security exposure compared to a hard session cap.
 - **In-process event bus** — The system uses an in-memory event bus for simplicity and performance, enabling fast event propagation within the same Node process. The tradeoff is reduced reliability: if the process crashes after an event is emitted, side effects (such as CRM sync or DB updates) may be lost. A production upgrade would involve an external queue or outbox pattern for guaranteed delivery.
 - **SQL vs NoSQL decision** — The choice is detailed in the DB design section, but the main tradeoff is structured consistency and relational integrity (SQL) versus schema flexibility and horizontal scalability (NoSQL). SQL was prioritized due to strong transactional and relational requirements.
-- **Document upload / notes** — Document and note events are modeled conceptually without a dedicated storage layer or blob system. This simplifies the architecture and keeps the scope focused, but the tradeoff is reduced realism compared to a full production system where file storage and metadata separation would be required.
 - **Error responses** — All non-HTTP errors are normalized into generic 500 responses to avoid leaking internal implementation details such as Prisma errors or stack traces. The tradeoff is reduced client-side error granularity, but improved security and system hardening.
 - **Monolith process** — API, event listeners, and background jobs run within a single Node process for simplicity and fast development. This is appropriate for a bounded system scope and easier debugging, but the tradeoff is limited scalability and fault isolation. In production, these concerns would be split into separate services or workers.
-- **Account eligibility logic** — An account becomes eligible for auctions only after document upload and reaching the READY_FOR_AUCTION state. This enforces a clear business rule that ensures only verified accounts enter financial workflows, improving data integrity and process correctness.
 - **Event-driven architecture** — The system uses an event-driven approach to decouple actions (e.g. document upload, offer submission) from side effects like CRM sync or analytics updates. This improves extensibility and separation of concerns, but introduces complexity in debugging and potential eventual consistency tradeoffs.
 - **Auction closedAt field** — The closedAt field is stored explicitly to represent the exact time an auction expires (e.g. three days after creation), instead of recalculating it dynamically from createdAt on every query. This improves performance and simplifies logic, especially for filtering auctions by status (open, closed, expired) and for analytics. The tradeoff is a small increase in storage and the need to ensure consistency between createdAt and closedAt, but in this case the benefit of avoiding repeated calculations and keeping queries efficient outweighs the cost.
 - **Analytics design** — The selected analytics focus on operational visibility (e.g. total accounts, auction states, offer metrics, CRM sync success/failure). The tradeoff is that the system does not yet support deep ad-hoc analytics, but instead prioritizes predefined, business-relevant KPIs.
-- **Admin restriction on bank offers** — Despite full RBAC permissions, admins are not allowed to create bank offers because they are not associated with a specific financial institution context. This enforces domain correctness over pure permission flexibility, preventing logically invalid system states.
-- **User-account relationship model** — Users are allowed to be linked to accounts and perform actions directly on them without additional approval layers.
+
 ---
 
 ## What I would do in a larger scale and real production
- - **Message broker** — In a production-ready system, I would extract event handling into a dedicated message broker system such as Kafka. A message broker is a middleware that enables asynchronous communication between services by publishing events to topics and consuming them independently. Instead of tightly coupling event logic inside the main backend, producers would publish events (e.g. document_uploaded) to specific topics, and separate consumer services would process them (e.g. syncing with CRM or writing to the database). This improves scalability, separation of concerns, and fault tolerance, since the system can handle high throughput and grow the number of event types and consumers independently. It also reduces complexity in the core application logic and supports distributed processing at scale.
+ - **Message broker** — In a production-ready system, I would extract event handling into a dedicated message broker system such as Kafka. A message broker is middleware that enables asynchronous communication between services by publishing events to topics and consuming them independently. Instead of tightly coupling event logic inside the main backend, producers would publish events (e.g. `document_uploaded`) to specific topics, and separate consumer services would process them (e.g. syncing with CRM or writing to the database).
+
+This approach typically also involves introducing a **separate dedicated service (or multiple services) for event processing**, decoupled from the core backend. As a result, each part of the system can be scaled independently: the API layer can scale based on request load, while the event-processing services can scale based on event volume. This leads to significantly higher and more flexible **scalability**, since consumers can be horizontally scaled without affecting the core application.
+
+Overall, this improves scalability, separation of concerns, and fault tolerance. The system can handle high throughput more effectively, grow the number of event types and consumers independently, and isolate failures in event processing from the main user-facing flows. It also reduces complexity in the core application logic and supports distributed processing at scale.
+
 - **Rate limiting** — This mechanism controls how many requests a user can send within a given time window (e.g. 10 requests per hour). It is important in production systems to prevent abuse, protect backend resources, and ensure fair usage across users. In a system like this, it also adds a security layer against brute-force attacks and excessive API consumption.
 - **APM** — APM tools such as Grafana (or similar observability platforms) provide real-time insights into system performance, including latency, error rates, and resource usage. In production, this would be essential for detecting bottlenecks, monitoring system health, and proactively identifying issues before they impact users.
 - **Pagination** — Instead of returning large datasets in a single request, pagination allows data to be delivered in smaller chunks. This improves performance, reduces database load, and enhances user experience by only fetching what is needed at a time, especially for lists like accounts, events, or auctions.
@@ -461,5 +461,20 @@ This repository ships **`prisma/schema.prisma`** and uses **`prisma db push`** (
 - **Manual account eligibility approval** — After document upload or account creation, an administrator manually reviews and approves the account before it becomes active. This introduces a human validation step, ensuring data quality, compliance, and preventing fraudulent or incomplete accounts from being used in the system.
 - **Password expiry mechanism** — Enforcing periodic password changes (e.g. every 30 days) increases security by limiting the lifetime of potentially compromised credentials. This is especially important in systems handling sensitive financial or personal data, as it reduces long-term exposure risk.
 - **Logs** - In a production system, I would extend the current basic logging into a structured and centralized logging strategy. This would include using structured logs (e.g. JSON format) with consistent fields such as requestId, userId, event type, and timestamps, enabling easier tracing across the system. Logs would be aggregated into a centralized platform (e.g. ELK stack or similar) to allow searching, monitoring, and alerting. I would also differentiate log levels (info, warn, error, debug) and add correlation between requests and background processes (such as event handling or CRM sync), so issues can be traced end-to-end. The goal is to improve observability, simplify debugging in distributed flows, and provide better visibility into system behavior under real production load.
+
+---
+
+## Prisma and schema evolution (no committed migrations)
+
+This repository ships **`prisma/schema.prisma`** and uses **`prisma db push`** (`npm run db:push`) to align a **development** database with the schema **without** generating SQL migration history.
+
+**Why no `prisma/migrations` folder**
+
+- Early-stage and demo-friendly: schema changes apply quickly, with less merge friction on migration files.
+- Disposable local databases match the model in seconds.
+
+**What I would do for production**
+
+- Introduce **versioned migrations** (`prisma migrate dev` in development, **`prisma migrate deploy`** in CI/CD) once the schema stabilizes. Migrations give repeatable, reviewable DDL, auditable rollouts, and safe evolution on shared databases.
 
 
