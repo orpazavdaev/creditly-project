@@ -20,7 +20,7 @@ export class EventBus {
         (h as Handler<T>)(payload);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`[EventBus] handler error on "${event}": ${msg}\n`);
+        console.error(`[EventBus] handler error on "${event}": ${msg}`);
       }
     }
   }

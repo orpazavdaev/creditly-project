@@ -9,7 +9,7 @@ export function startRefreshTokenCleanupJob(): () => void {
       await authRepo.deleteExpiredRefreshTokens();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      process.stderr.write(`[refresh-token-cleanup] ${msg}\n`);
+      console.error(`[refresh-token-cleanup] ${msg}`);
     }
   };
   void run();

@@ -15,7 +15,7 @@ export function errorHandler(
     return;
   }
   const asError = err instanceof Error ? err : new Error(typeof err === "string" ? err : JSON.stringify(err));
-  process.stderr.write(`[error] ${asError.name}: ${asError.message}\n${asError.stack ?? ""}\n`);
+  console.error(`[error] ${asError.name}: ${asError.message}\n${asError.stack ?? ""}`);
   res.status(500).json({
     error: "internal_error",
     message: "Something went wrong. Please try again.",

@@ -525,9 +525,9 @@ async function main(): Promise<void> {
     ],
   });
 
-  process.stdout.write("Seed complete.\n");
-  process.stdout.write("Password for all seeded users: Password123!\n");
-  process.stdout.write(
+  console.log("Seed complete.");
+  console.log("Password for all seeded users: Password123!");
+  console.log(
     [
       admin.email,
       managerAlex.email,
@@ -542,13 +542,13 @@ async function main(): Promise<void> {
       bankerSummitMortgage.email,
       bankerHarborPersonal.email,
       bankerHarborRefinance.email,
-    ].join("\n") + "\n"
+    ].join("\n")
   );
 }
 
 main()
   .catch((e) => {
-    process.stderr.write(`${e instanceof Error ? e.stack ?? e.message : String(e)}\n`);
+    console.error(e instanceof Error ? e.stack ?? e.message : String(e));
     process.exit(1);
   })
   .finally(async () => {

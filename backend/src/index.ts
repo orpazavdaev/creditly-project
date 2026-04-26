@@ -13,5 +13,5 @@ const app = createApp(env, appEventBus);
 startRefreshTokenCleanupJob();
 
 app.listen(env.port, () => {
-  process.stdout.write(`listening on ${env.port}\n`);
+  console.log(`listening on ${env.port}`);
 });
